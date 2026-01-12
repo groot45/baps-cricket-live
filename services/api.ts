@@ -33,7 +33,7 @@ export const databaseService = {
       const { error } = await supabase.from('matches').select('id').limit(1);
       if (error) {
         if (error.code === 'PGRST116' || error.message.includes('not find the table') || error.code === '42P01') {
-          this.lastError = "DB Connected. Run Migration Script.";
+          this.lastError = "DB Connected. Migration Required.";
           this.isOffline = true;
           return;
         }
@@ -48,6 +48,10 @@ export const databaseService = {
     }
   },
 
+  /**
+   * Hybrid Merge Logic: 
+   * Always prioritizes data that hasn't been synced yet (ID starting with prefix)
+   */
   async getPlayers(): Promise<Player[]> {
     const local: Player[] = getLocal('players') || [];
     if (!supabase || this.isOffline) return local;
@@ -55,8 +59,13 @@ export const databaseService = {
       const { data, error } = await supabase.from('players').select('*');
       if (error) throw error;
       if (data) { 
-        saveLocal('players', data); 
-        return data as Player[]; 
+        const remoteData = data as Player[];
+        // Keep local players that aren't in remote yet
+        const remoteIds = new Set(remoteData.map(r => r.id));
+        const localOnly = local.filter(l => l.id.startsWith('p_') && !remoteIds.has(l.id));
+        const merged = [...remoteData, ...localOnly];
+        saveLocal('players', merged); 
+        return merged; 
       }
     } catch (e) {
       console.warn("DB Player Fetch Error:", e);
@@ -74,20 +83,15 @@ export const databaseService = {
       role: player.role || 'Batsman'
     } as Player;
     
-    // Save locally first
+    // Save locally first (INSTANT UI UPDATE)
     const players = getLocal('players') || [];
     saveLocal('players', [...players, newPlayer]);
     
     if (supabase && !this.isOffline) {
       try {
         const { error } = await supabase.from('players').insert(newPlayer);
-        if (error) {
-          console.error("Supabase Player Sync Error:", error);
-          // We don't throw here so the UI can still work locally
-        }
-      } catch (err) {
-        console.error("Supabase Exception:", err);
-      }
+        if (error) console.error("Cloud Sync Delayed:", error.message);
+      } catch (err) {}
     }
     return newPlayer;
   },
@@ -98,7 +102,14 @@ export const databaseService = {
     try {
       const { data, error } = await supabase.from('teams').select('*');
       if (error) throw error;
-      if (data) { saveLocal('teams', data); return data as Team[]; }
+      if (data) { 
+        const remoteData = data as Team[];
+        const remoteIds = new Set(remoteData.map(r => r.id));
+        const localOnly = local.filter(l => l.id.startsWith('t_') && !remoteIds.has(l.id));
+        const merged = [...remoteData, ...localOnly];
+        saveLocal('teams', merged); 
+        return merged; 
+      }
     } catch (e) {
       console.warn("DB Team Fetch Error:", e);
     }
@@ -119,7 +130,7 @@ export const databaseService = {
     if (supabase && !this.isOffline) {
       try {
         const { error } = await supabase.from('teams').insert(newTeam);
-        if (error) console.error("Supabase Team Sync Error:", error);
+        if (error) console.error("Cloud Sync Delayed:", error.message);
       } catch (err) {}
     }
     return newTeam;
@@ -145,7 +156,14 @@ export const databaseService = {
     try {
       const { data, error } = await supabase.from('matches').select('*');
       if (error) throw error;
-      if (data) { saveLocal('matches', data); return data as Match[]; }
+      if (data) { 
+        const remoteData = data as Match[];
+        const remoteIds = new Set(remoteData.map(r => r.id));
+        const localOnly = local.filter(l => l.id.startsWith('m_') && !remoteIds.has(l.id));
+        const merged = [...remoteData, ...localOnly];
+        saveLocal('matches', merged); 
+        return merged; 
+      }
     } catch (e) {
       console.warn("DB Match Fetch Error:", e);
     }
@@ -182,7 +200,7 @@ export const databaseService = {
     if (supabase && !this.isOffline) {
       try {
         const { error } = await supabase.from('matches').insert(newMatch);
-        if (error) console.error("Supabase Match Sync Error:", error);
+        if (error) console.error("Cloud Sync Delayed:", error.message);
       } catch (err) {}
     }
     return newMatch;
