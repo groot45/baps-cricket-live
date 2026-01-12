@@ -59,6 +59,13 @@ ALTER TABLE config DISABLE ROW LEVEL SECURITY; ALTER TABLE users DISABLE ROW LEV
       setPlayers(p || []);
       setMatches(m || []);
       setUsers(u || []);
+      
+      // Update selectedTeam to latest object from the fetched teams list to ensure UI updates
+      if (selectedTeam) {
+        const updatedSelectedTeam = t.find(team => team.id === selectedTeam.id);
+        if (updatedSelectedTeam) setSelectedTeam(updatedSelectedTeam);
+      }
+
       setDbStatus({ 
         connected: !databaseService.isOffline, 
         mode: databaseService.isOffline ? 'Local (Offline)' : (databaseService.isGlobalConfig ? 'Global Live Mode' : 'Supabase (Live)'),
@@ -104,13 +111,33 @@ ALTER TABLE config DISABLE ROW LEVEL SECURITY; ALTER TABLE users DISABLE ROW LEV
   };
 
   const handleCreatePlayer = async () => {
-    if (!newPlayer.name || !newPlayer.teamId) { alert("Please enter name and ensure team is selected."); return; }
-    await databaseService.createPlayer(newPlayer);
-    setShowPlayerModal(false);
-    const tid = newPlayer.teamId;
-    setNewPlayer({ name: '', teamId: tid, battingStyle: 'Right Hand', bowlingStyle: 'Right Arm Fast', role: 'Batsman' });
-    // Trigger direct state update for immediate feedback
-    fetchData();
+    if (!newPlayer.name || !newPlayer.teamId) { 
+      alert("Error: Player name and team assignment are required."); 
+      return; 
+    }
+    
+    try {
+      setLoading(true);
+      const created = await databaseService.createPlayer(newPlayer);
+      setShowPlayerModal(false);
+      
+      // Refresh list immediately
+      await fetchData();
+      
+      // Reset form but keep team context
+      const currentTeamId = newPlayer.teamId;
+      setNewPlayer({ 
+        name: '', 
+        teamId: currentTeamId, 
+        battingStyle: 'Right Hand', 
+        bowlingStyle: 'Right Arm Fast', 
+        role: 'Batsman' 
+      });
+    } catch (e) {
+      alert("Failed to add player. Please try again.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleCreateUser = async () => {
@@ -244,7 +271,7 @@ ALTER TABLE config DISABLE ROW LEVEL SECURITY; ALTER TABLE users DISABLE ROW LEV
                       <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.3em] mb-6 italic">TEAM ROSTER ({rosterPlayers.length})</h3>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                          {rosterPlayers.length === 0 ? <div className="col-span-full p-20 text-center text-slate-300 font-black italic border-2 border-dashed border-slate-100 rounded-[2rem]">Squad is empty</div> : rosterPlayers.map(p => (
-                           <div key={p.id} className="bg-white p-5 rounded-2xl border-2 border-slate-50 shadow-sm flex items-center justify-between">
+                           <div key={p.id} className="bg-white p-5 rounded-2xl border-2 border-slate-50 shadow-sm flex items-center justify-between animate-in fade-in slide-in-from-bottom-2">
                               <div><div className="font-black uppercase italic text-slate-800">{p.name}</div><div className="flex space-x-2 mt-1"><span className="text-[8px] px-1.5 py-0.5 bg-slate-100 rounded text-slate-500 font-black uppercase tracking-widest">{p.role}</span><span className="text-[8px] px-1.5 py-0.5 bg-pramukh-navy/10 rounded text-pramukh-navy font-black uppercase tracking-widest">{p.battingStyle}</span></div></div>
                               <i className="fas fa-user-circle text-slate-200 text-xl"></i>
                            </div>
@@ -402,7 +429,8 @@ ALTER TABLE config DISABLE ROW LEVEL SECURITY; ALTER TABLE users DISABLE ROW LEV
       {showPlayerModal && (
         <div className="fixed inset-0 bg-pramukh-navy/95 backdrop-blur-xl flex items-center justify-center p-6 z-[100]">
           <div className="bg-white rounded-[3rem] w-full max-w-xl p-12 shadow-2xl border-b-[16px] border-pramukh-red">
-            <h2 className="text-3xl font-black text-pramukh-navy uppercase italic mb-8 text-center">ADD TO SQUAD</h2>
+            <h2 className="text-3xl font-black text-pramukh-navy uppercase italic mb-2 text-center">ADD TO SQUAD</h2>
+            <p className="text-center text-[10px] font-black text-pramukh-red uppercase tracking-widest mb-8 italic">ASSIGNING TO: {selectedTeam?.name}</p>
             <div className="space-y-5">
               <input type="text" className="w-full px-6 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-black uppercase italic" placeholder="Full Name" value={newPlayer.name} onChange={e => setNewPlayer({...newPlayer, name: e.target.value})} />
               <div className="grid grid-cols-2 gap-4">
@@ -410,7 +438,7 @@ ALTER TABLE config DISABLE ROW LEVEL SECURITY; ALTER TABLE users DISABLE ROW LEV
                  <div><label className="text-[10px] font-black text-slate-400 uppercase ml-2 mb-1 block">Batting</label><select className="w-full px-6 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-black uppercase italic" value={newPlayer.battingStyle} onChange={e => setNewPlayer({...newPlayer, battingStyle: e.target.value as BattingStyle})}><option value="Right Hand">Right Hand</option><option value="Left Hand">Left Hand</option></select></div>
               </div>
               <div><label className="text-[10px] font-black text-slate-400 uppercase ml-2 mb-1 block">Bowling</label><select className="w-full px-6 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-black uppercase italic" value={newPlayer.bowlingStyle} onChange={e => setNewPlayer({...newPlayer, bowlingStyle: e.target.value as BowlingStyle})}><option value="Right Arm Fast">Right Arm Fast</option><option value="Right Arm Spin">Right Arm Spin</option><option value="Left Arm Fast">Left Arm Fast</option><option value="Left Arm Spin">Left Arm Spin</option><option value="None">None</option></select></div>
-              <div className="flex gap-4 pt-4"><button onClick={handleCreatePlayer} className="flex-1 bg-pramukh-navy text-white font-black py-4 rounded-xl uppercase italic shadow-lg">Add Player</button><button onClick={() => setShowPlayerModal(false)} className="flex-1 bg-slate-100 text-slate-400 font-black py-4 rounded-xl uppercase italic">Cancel</button></div>
+              <div className="flex gap-4 pt-4"><button onClick={handleCreatePlayer} className="flex-1 bg-pramukh-navy text-white font-black py-4 rounded-xl uppercase italic shadow-lg">Confirm Add</button><button onClick={() => setShowPlayerModal(false)} className="flex-1 bg-slate-100 text-slate-400 font-black py-4 rounded-xl uppercase italic">Cancel</button></div>
             </div>
           </div>
         </div>

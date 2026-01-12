@@ -52,20 +52,41 @@ export const databaseService = {
     if (!supabase || this.isOffline) return local;
     try {
       const { data } = await supabase.from('players').select('*');
-      if (data) { saveLocal('players', data); return data; }
+      if (data) { 
+        // Merge logic: ensure local temporary players (p_...) are preserved until they exist in remote
+        const merged = [...(data as Player[])];
+        local.forEach(lp => {
+          if (lp.id.startsWith('p_') && !merged.find(rp => rp.id === lp.id)) {
+            merged.push(lp);
+          }
+        });
+        saveLocal('players', merged); 
+        return merged; 
+      }
     } catch (e) {}
     return local;
   },
 
   async createPlayer(player: Partial<Player>): Promise<Player> {
-    const newPlayer = { ...player, id: `p_${Date.now()}` };
-    if (supabase && !this.isOffline) {
-      const { error } = await supabase.from('players').insert(newPlayer);
-      if (error) console.error("Supabase Player Error:", error);
-    }
+    const newPlayer = { 
+      ...player, 
+      id: `p_${Date.now()}` 
+    };
+    
+    // 1. Save to Local First (Optimistic)
     const players = getLocal('players') || [];
-    const updatedPlayers = [...players, newPlayer];
-    saveLocal('players', updatedPlayers);
+    saveLocal('players', [...players, newPlayer]);
+    
+    // 2. Sync to Supabase if available
+    if (supabase && !this.isOffline) {
+      try {
+        const { error } = await supabase.from('players').insert(newPlayer);
+        if (error) console.error("Supabase Player Error:", error);
+      } catch (err) {
+        console.error("Supabase Save Exception:", err);
+      }
+    }
+    
     return newPlayer as Player;
   },
 

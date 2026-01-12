@@ -145,42 +145,24 @@ const ScorerDashboard: React.FC = () => {
           </div>
         </div>
       ) : (
-        <div className="flex flex-col flex-grow relative pb-[320px]">
-          {/* STICKY TOP SCOREBAR */}
-          <div className="sticky top-0 z-50 bg-pramukh-navy text-white px-6 py-4 flex justify-between items-center shadow-2xl border-b-2 border-pramukh-red">
-             <div className="flex flex-col">
-                <span className="text-[9px] font-black uppercase text-white/30 leading-none mb-1">SCORE</span>
-                <div className="text-3xl font-black italic leading-none">
-                   {currentInning?.runs || 0}<span className="text-pramukh-red">/</span>{currentInning?.wickets || 0}
-                </div>
-             </div>
-             <div className="text-center">
-                <div className="text-lg font-black italic leading-none">{currentInning?.overs || 0}.{currentInning?.balls || 0}</div>
-                <div className="text-[8px] font-black text-white/30 uppercase tracking-widest mt-1">OVERS</div>
-             </div>
-             <div className="flex flex-col items-end">
-                {target ? (
-                  <>
-                    <span className="text-[9px] font-black uppercase text-white/30 leading-none mb-1">TARGET</span>
-                    <div className="text-xl font-black text-pramukh-red italic leading-none">{target}</div>
-                  </>
-                ) : (
-                  <button onClick={() => setShowEndModal(true)} className="bg-pramukh-red px-3 py-2 rounded-xl text-[9px] font-black uppercase italic shadow-lg">END INN</button>
-                )}
-             </div>
+        <div className="flex flex-col flex-grow relative pb-[380px]">
+          {/* HEADER INFO */}
+          <div className="bg-pramukh-navy text-white px-6 py-4 flex justify-between items-center border-b-2 border-pramukh-red">
+             <div className="text-sm font-black italic uppercase text-white/50">{activeMatch.teamA.shortName} v {activeMatch.teamB.shortName}</div>
+             <button onClick={() => setActiveMatch(null)} className="text-[10px] font-black uppercase tracking-widest bg-white/10 px-3 py-1.5 rounded-lg italic">Exit Match</button>
           </div>
 
           <div className="flex-grow px-4 py-6 space-y-6">
-             {/* TARGET STATUS BAR */}
+             {/* CHASE TRACKER */}
              {target && runsNeeded !== null && (
-               <div className="bg-pramukh-navy/5 border-2 border-pramukh-navy/10 p-4 rounded-2xl flex justify-between items-center">
+               <div className="bg-amber-50 border-2 border-amber-200 p-5 rounded-3xl flex justify-between items-center shadow-sm">
                   <div>
-                     <span className="text-[9px] font-black text-slate-400 uppercase block mb-1">RUNS NEEDED</span>
-                     <span className="text-2xl font-black text-pramukh-navy italic">{runsNeeded > 0 ? runsNeeded : 'WON'}</span>
+                     <span className="text-[9px] font-black text-amber-600 uppercase block mb-1">RUNS TO WIN</span>
+                     <span className="text-3xl font-black text-amber-800 italic">{runsNeeded > 0 ? runsNeeded : 'TARGET MET'}</span>
                   </div>
                   <div className="text-right">
-                     <span className="text-[9px] font-black text-slate-400 uppercase block mb-1">BALLS LEFT</span>
-                     <span className="text-2xl font-black text-pramukh-navy italic">{ballsRemaining}</span>
+                     <span className="text-[9px] font-black text-amber-600 uppercase block mb-1">BALLS LEFT</span>
+                     <span className="text-3xl font-black text-amber-800 italic">{ballsRemaining}</span>
                   </div>
                </div>
              )}
@@ -195,7 +177,7 @@ const ScorerDashboard: React.FC = () => {
                       </span>
                       {currentInning?.strikerId && (
                          <div className="mt-2 text-[10px] font-black text-slate-400 uppercase italic">
-                           {currentInning.batsmenStats.find(s => s.playerId === currentInning.strikerId)?.runs || 0} runs
+                           {currentInning.batsmenStats.find(s => s.playerId === currentInning.strikerId)?.runs || 0} ({currentInning.batsmenStats.find(s => s.playerId === currentInning.strikerId)?.balls || 0})
                          </div>
                       )}
                    </button>
@@ -231,26 +213,44 @@ const ScorerDashboard: React.FC = () => {
                 }} className="flex-1 bg-white border-2 border-slate-100 p-4 rounded-2xl font-black uppercase text-[10px] italic shadow-sm active:scale-95 transition-all flex items-center justify-center">
                    <i className="fas fa-arrows-rotate mr-2 text-pramukh-red"></i> SWAP STRIKE
                 </button>
-                <button onClick={() => setActiveMatch(null)} className="flex-1 bg-white border-2 border-slate-100 p-4 rounded-2xl font-black uppercase text-[10px] italic shadow-sm active:scale-95 transition-all flex items-center justify-center">
-                   <i className="fas fa-list mr-2 text-slate-400"></i> CHANGE MATCH
+                <button onClick={() => setShowEndModal(true)} className="flex-1 bg-pramukh-navy text-white p-4 rounded-2xl font-black uppercase text-[10px] italic shadow-lg active:scale-95 transition-all">
+                   <i className="fas fa-flag-checkered mr-2"></i> {activeMatch.currentInnings === 1 ? 'END INN.' : 'END MATCH'}
                 </button>
              </div>
-
-             {target && <button onClick={() => setShowEndModal(true)} className="w-full bg-pramukh-navy text-white p-5 rounded-2xl font-black uppercase italic shadow-xl">FINISH MATCH</button>}
           </div>
 
-          {/* MASSIVE ACTION PAD - FIXED AT BOTTOM */}
-          <div className="fixed bottom-0 left-0 right-0 bg-white border-t-4 border-slate-100 p-4 grid grid-cols-4 gap-2 shadow-[0_-20px_50px_rgba(0,0,0,0.1)] z-40">
-             {[0, 1, 2, 3, 4, 6].map(runs => (
-               <button key={runs} onClick={() => handleScore(runs)} className="bg-slate-50 hover:bg-pramukh-navy hover:text-white h-20 rounded-2xl font-black text-3xl italic border-2 border-slate-100 active:scale-90 transition-all flex items-center justify-center">
-                  {runs}
-               </button>
-             ))}
-             <button onClick={() => handleScore(0, false, 'wide')} className="bg-amber-50 text-amber-600 h-20 rounded-2xl font-black text-xs uppercase border-2 border-amber-200 active:scale-90 flex items-center justify-center">WD +1</button>
-             <button onClick={() => handleScore(0, false, 'no-ball')} className="bg-amber-50 text-amber-600 h-20 rounded-2xl font-black text-xs uppercase border-2 border-amber-200 active:scale-90 flex items-center justify-center">NB +1</button>
-             <button onClick={() => handleScore(0, true)} className="col-span-4 bg-pramukh-red text-white h-24 rounded-3xl font-black text-4xl italic shadow-xl active:scale-95 border-b-[12px] border-red-800 flex items-center justify-center">
-                WICKET
-             </button>
+          {/* COMBINED CONTROL ZONE - STICKY AT BOTTOM */}
+          <div className="fixed bottom-0 left-0 right-0 bg-white shadow-[0_-20px_60px_rgba(0,0,0,0.15)] z-40 border-t-2 border-slate-50">
+             {/* MINI MINI SCOREBAR INSIDE PAD */}
+             <div className="bg-pramukh-navy text-white px-6 py-3 flex justify-between items-center">
+                <div className="flex items-baseline space-x-3">
+                   <span className="text-3xl font-black italic tracking-tighter">
+                      {currentInning?.runs || 0}<span className="text-pramukh-red">/</span>{currentInning?.wickets || 0}
+                   </span>
+                   <span className="text-xs font-black opacity-40 uppercase tracking-widest">{currentInning?.overs || 0}.{currentInning?.balls || 0} OVERS</span>
+                </div>
+                {target && <div className="text-[10px] font-black bg-pramukh-red px-2 py-0.5 rounded italic">TARGET: {target}</div>}
+             </div>
+
+             {/* BUTTON GRID */}
+             <div className="p-3 grid grid-cols-4 gap-2">
+                {[0, 1, 2, 3, 4, 6].map(runs => (
+                  <button key={runs} onClick={() => handleScore(runs)} className="bg-slate-50 hover:bg-pramukh-navy hover:text-white h-20 rounded-2xl font-black text-4xl italic border-2 border-slate-100 active:scale-90 transition-all flex items-center justify-center">
+                     {runs}
+                  </button>
+                ))}
+                <button onClick={() => handleScore(0, false, 'wide')} className="bg-amber-50 text-amber-700 h-20 rounded-2xl font-black text-xs uppercase border-2 border-amber-200 active:scale-90 flex flex-col items-center justify-center">
+                   <span className="text-lg">WD</span>
+                   <span className="text-[8px]">+1 RUN</span>
+                </button>
+                <button onClick={() => handleScore(0, false, 'no-ball')} className="bg-amber-50 text-amber-700 h-20 rounded-2xl font-black text-xs uppercase border-2 border-amber-200 active:scale-90 flex flex-col items-center justify-center">
+                   <span className="text-lg">NB</span>
+                   <span className="text-[8px]">+1 RUN</span>
+                </button>
+                <button onClick={() => handleScore(0, true)} className="col-span-4 bg-pramukh-red text-white h-24 rounded-3xl font-black text-4xl italic shadow-xl active:scale-95 border-b-[10px] border-red-800 flex items-center justify-center tracking-tighter">
+                   <i className="fas fa-skull-crossbones mr-4 text-white/50"></i> WICKET
+                </button>
+             </div>
           </div>
         </div>
       )}
@@ -265,7 +265,7 @@ const ScorerDashboard: React.FC = () => {
               </div>
               <div className="overflow-y-auto space-y-2 no-scrollbar">
                  {eligiblePlayers.length === 0 ? (
-                    <div className="p-10 text-center text-slate-300 font-black italic">No players available</div>
+                    <div className="p-10 text-center text-slate-300 font-black italic">No players found for this team</div>
                  ) : eligiblePlayers.map(p => (
                    <button key={p.id} onClick={() => assignPlayer(p.id)} className="w-full text-left p-6 rounded-2xl bg-slate-50 hover:bg-pramukh-navy hover:text-white transition-all font-black uppercase italic text-sm border-2 border-transparent hover:border-white shadow-sm flex justify-between items-center">
                       {p.name}
@@ -285,10 +285,10 @@ const ScorerDashboard: React.FC = () => {
                  <i className="fas fa-flag-checkered text-4xl text-pramukh-red"></i>
               </div>
               <h2 className="text-3xl font-black text-pramukh-navy uppercase italic mb-4">
-                 {activeMatch?.currentInnings === 1 ? 'END FIRST INNING?' : 'FINISH MATCH?'}
+                 {activeMatch?.currentInnings === 1 ? 'PROCEED TO 2nd INN.?' : 'MATCH COMPLETED?'}
               </h2>
               <p className="text-slate-400 text-xs font-bold uppercase tracking-[0.2em] mb-10 leading-relaxed italic">
-                 Confirming this will lock current scores and {activeMatch?.currentInnings === 1 ? 'calculate target' : 'declare result'}.
+                 {activeMatch?.currentInnings === 1 ? 'Target will be calculated and teams will swap.' : 'Result will be declared and match finalized.'}
               </p>
               <div className="flex gap-4">
                  <button onClick={handleEndInning} className="flex-1 bg-pramukh-navy text-white font-black py-5 rounded-2xl uppercase italic shadow-xl active:scale-95">CONFIRM</button>
