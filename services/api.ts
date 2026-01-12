@@ -23,20 +23,17 @@ export const databaseService = {
   async initRealm(config?: { url: string; key: string }) {
     const url = SUPABASE_CONFIG.URL || config?.url || localStorage.getItem('sb_url');
     const key = SUPABASE_CONFIG.ANON_KEY || config?.key || localStorage.getItem('sb_key');
-    
     this.isGlobalConfig = !!(SUPABASE_CONFIG.URL && SUPABASE_CONFIG.ANON_KEY);
-
     if (!url || !key || url === "" || key === "") {
       this.isOffline = true;
       return;
     }
-
     try {
       supabase = createClient(url, key);
       const { error } = await supabase.from('matches').select('id').limit(1);
       if (error) {
         if (error.code === 'PGRST116' || error.message.includes('not find the table') || error.code === '42P01') {
-          this.lastError = "DB Connected. Need to run SQL script.";
+          this.lastError = "DB Connected. Run SQL script.";
           this.isOffline = true;
           return;
         }
@@ -45,10 +42,6 @@ export const databaseService = {
       this.isAtlasConnected = true;
       this.isOffline = false;
       this.lastError = "";
-      if (!this.isGlobalConfig) {
-        localStorage.setItem('sb_url', url);
-        localStorage.setItem('sb_key', key);
-      }
     } catch (err: any) {
       this.isOffline = true;
     }
@@ -88,6 +81,18 @@ export const databaseService = {
     const teams = getLocal('teams') || [];
     saveLocal('teams', [...teams, newTeam]);
     return newTeam as Team;
+  },
+
+  async updateTeam(id: string, updates: Partial<Team>): Promise<Team> {
+    if (supabase && !this.isOffline) await supabase.from('teams').update(updates).eq('id', id);
+    const teams = await this.getTeams();
+    const idx = teams.findIndex(t => t.id === id);
+    if (idx !== -1) {
+      teams[idx] = { ...teams[idx], ...updates };
+      saveLocal('teams', teams);
+      return teams[idx];
+    }
+    throw new Error("Team not found");
   },
 
   async getMatches(): Promise<Match[]> {
@@ -130,12 +135,9 @@ export const databaseService = {
     if (idx === -1) throw new Error("Match not found");
     const match = { ...matches[idx] };
     const cur = match.innings[match.currentInnings - 1];
-
     if (updates.strikerId) cur.strikerId = updates.strikerId;
     if (updates.nonStrikerId) cur.nonStrikerId = updates.nonStrikerId;
     if (updates.currentBowlerId) cur.currentBowlerId = updates.currentBowlerId;
-
-    // Ensure player exists in stats
     const players = await this.getPlayers();
     [cur.strikerId, cur.nonStrikerId].forEach(id => {
       if (id && !cur.batsmenStats.find(s => s.playerId === id)) {
@@ -147,7 +149,6 @@ export const databaseService = {
         const p = players.find(x => x.id === cur.currentBowlerId);
         if (p) cur.bowlerStats.push({ playerId: p.id, name: p.name, overs: 0, balls: 0, runs: 0, wickets: 0 });
     }
-
     if (supabase && !this.isOffline) await supabase.from('matches').update({ innings: match.innings }).eq('id', matchId);
     matches[idx] = match;
     saveLocal('matches', matches);
@@ -160,17 +161,9 @@ export const databaseService = {
     if (idx === -1) throw new Error("Match not found");
     const match = { ...matches[idx] };
     const cur = match.innings[match.currentInnings - 1];
-
-    // 1. Update Inning Totals
     if (scoreUpdate.isWicket) cur.wickets += 1;
     else cur.runs += scoreUpdate.run;
-
-    // 2. Handle Extras
-    if (scoreUpdate.extraType === 'wide' || scoreUpdate.extraType === 'no-ball') {
-      cur.runs += 1;
-    }
-
-    // 3. Update Individual Stats
+    if (scoreUpdate.extraType === 'wide' || scoreUpdate.extraType === 'no-ball') cur.runs += 1;
     if (cur.strikerId) {
       let bStat = cur.batsmenStats.find(s => s.playerId === cur.strikerId);
       if (bStat) {
@@ -181,45 +174,36 @@ export const databaseService = {
            if (scoreUpdate.run === 6) bStat.sixes += 1;
         } else if (scoreUpdate.extraType === 'no-ball') {
            bStat.runs += scoreUpdate.run;
-           bStat.balls += 1; // No balls count for balls faced in many formats
+           bStat.balls += 1;
         }
       }
     }
-
     if (cur.currentBowlerId) {
       let boStat = cur.bowlerStats.find(s => s.playerId === cur.currentBowlerId);
       if (boStat) {
         if (scoreUpdate.isWicket) boStat.wickets += 1;
         boStat.runs += scoreUpdate.run;
         if (scoreUpdate.extraType === 'wide' || scoreUpdate.extraType === 'no-ball') boStat.runs += 1;
-        
         if (scoreUpdate.extraType !== 'wide' && scoreUpdate.extraType !== 'no-ball') {
           boStat.balls += 1;
           if (boStat.balls >= 6) { boStat.overs += 1; boStat.balls = 0; }
         }
       }
     }
-
-    // 4. Update Overs
     if (scoreUpdate.extraType !== 'wide' && scoreUpdate.extraType !== 'no-ball') {
       cur.balls += 1;
       if (cur.balls >= 6) {
-        cur.overs += 1;
-        cur.balls = 0;
-        // Auto Rotate Strike at end of over
+        cur.overs += 1; cur.balls = 0;
         const temp = cur.strikerId;
         cur.strikerId = cur.nonStrikerId;
         cur.nonStrikerId = temp;
       }
     }
-
-    // 5. Strike Rotation on odd runs
     if (!scoreUpdate.isWicket && (scoreUpdate.run === 1 || scoreUpdate.run === 3)) {
       const temp = cur.strikerId;
       cur.strikerId = cur.nonStrikerId;
       cur.nonStrikerId = temp;
     }
-
     if (supabase && !this.isOffline) await supabase.from('matches').update({ innings: match.innings }).eq('id', matchId);
     matches[idx] = match;
     saveLocal('matches', matches);
@@ -244,7 +228,6 @@ export const databaseService = {
     return c;
   },
 
-  // Added missing createUser method
   async createUser(user: any): Promise<any> {
     const newUser = { ...user, id: `u_${Date.now()}` };
     if (supabase && !this.isOffline) await supabase.from('users').insert(newUser);
@@ -253,7 +236,6 @@ export const databaseService = {
     return newUser;
   },
 
-  // Added missing updateUser method
   async updateUser(id: string, updates: any): Promise<any> {
     if (supabase && !this.isOffline) await supabase.from('users').update(updates).eq('id', id);
     const users = getLocal('users') || [];

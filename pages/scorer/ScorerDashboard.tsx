@@ -57,6 +57,19 @@ const ScorerDashboard: React.FC = () => {
 
   if (!isScorer) return <div className="p-8 text-center text-red-600 font-black uppercase tracking-widest font-din">Access Denied</div>;
 
+  // Logic to filter players by team
+  const currentInning = activeMatch?.innings[activeMatch.currentInnings - 1];
+  const eligiblePlayers = players.filter(p => {
+    if (!activeMatch || !showPlayerModal || !currentInning) return false;
+    if (showPlayerModal === 'striker' || showPlayerModal === 'nonStriker') {
+        return p.teamId === currentInning.battingTeamId;
+    }
+    if (showPlayerModal === 'bowler') {
+        return p.teamId === currentInning.bowlingTeamId;
+    }
+    return false;
+  });
+
   return (
     <div className="max-w-7xl mx-auto px-4 py-8 pb-40 font-din">
       <div className="flex items-center justify-between mb-8">
@@ -158,13 +171,26 @@ const ScorerDashboard: React.FC = () => {
         <div className="fixed inset-0 z-[100] bg-pramukh-navy/95 backdrop-blur-xl flex items-center justify-center p-6">
            <div className="bg-white w-full max-w-lg rounded-[3rem] p-10 max-h-[80vh] flex flex-col">
               <div className="flex justify-between items-center mb-8">
-                 <h2 className="text-2xl font-black text-pramukh-navy uppercase italic">SELECT {showPlayerModal}</h2>
+                 <div>
+                    <h2 className="text-2xl font-black text-pramukh-navy uppercase italic">SELECT {showPlayerModal}</h2>
+                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mt-1 italic">
+                       PICKING FROM {showPlayerModal === 'bowler' ? 'BOWLING' : 'BATTING'} SQUAD
+                    </p>
+                 </div>
                  <button onClick={() => setShowPlayerModal(null)} className="text-slate-300 hover:text-red-500 text-2xl"><i className="fas fa-times"></i></button>
               </div>
               <div className="overflow-y-auto space-y-2 pr-2">
-                 {players.map(p => (
-                   <button key={p.id} onClick={() => assignPlayer(p.id)} className="w-full text-left p-5 rounded-2xl bg-slate-50 hover:bg-pramukh-navy hover:text-white transition-all font-black uppercase italic border-2 border-slate-100">
-                      {p.name}
+                 {eligiblePlayers.length === 0 ? (
+                    <div className="p-10 text-center font-black italic text-slate-300 uppercase">No players found in team roster</div>
+                 ) : eligiblePlayers.map(p => (
+                   <button key={p.id} onClick={() => assignPlayer(p.id)} className="w-full text-left p-5 rounded-2xl bg-slate-50 hover:bg-pramukh-navy hover:text-white transition-all border-2 border-slate-100 group">
+                      <div className="flex justify-between items-center">
+                         <div>
+                            <div className="font-black uppercase italic text-lg">{p.name}</div>
+                            <div className="text-[9px] font-black uppercase opacity-60 mt-1">{p.battingStyle} • {p.role}</div>
+                         </div>
+                         <i className="fas fa-plus-circle opacity-0 group-hover:opacity-100 transition-opacity"></i>
+                      </div>
                    </button>
                  ))}
               </div>

@@ -30,9 +30,17 @@ export interface Team {
   logoUrl?: string;
 }
 
+export type BattingStyle = 'Right Hand' | 'Left Hand';
+export type BowlingStyle = 'Right Arm Fast' | 'Right Arm Spin' | 'Left Arm Fast' | 'Left Arm Spin' | 'None';
+export type PlayerRole = 'Batsman' | 'Bowler' | 'All-Rounder' | 'Wicket Keeper';
+
 export interface Player {
   id: string;
   name: string;
+  teamId: string;
+  battingStyle?: BattingStyle;
+  bowlingStyle?: BowlingStyle;
+  role?: PlayerRole;
 }
 
 export interface BatsmanStats {
@@ -76,7 +84,6 @@ export interface Inning {
   overs: number;
   balls: number;
   oversHistory: Over[];
-  // Live player tracking
   strikerId?: string;
   nonStrikerId?: string;
   currentBowlerId?: string;
