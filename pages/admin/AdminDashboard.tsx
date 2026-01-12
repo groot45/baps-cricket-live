@@ -43,7 +43,7 @@ CREATE TABLE IF NOT EXISTS config (id TEXT PRIMARY KEY, name TEXT, "shortName" T
 CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, username TEXT UNIQUE, password TEXT, role TEXT);
 CREATE TABLE IF NOT EXISTS teams (id TEXT PRIMARY KEY, name TEXT, "shortName" TEXT, "logoUrl" TEXT);
 CREATE TABLE IF NOT EXISTS players (id TEXT PRIMARY KEY, name TEXT, "teamId" TEXT, "battingStyle" TEXT, "bowlingStyle" TEXT, role TEXT);
-CREATE TABLE IF NOT EXISTS matches (id TEXT PRIMARY KEY, "tournamentId" TEXT, "teamA" JSONB, "teamB" JSONB, status TEXT, "currentInnings" INTEGER, innings JSONB, "startTime" TEXT, venue TEXT);
+CREATE TABLE IF NOT EXISTS matches (id TEXT PRIMARY KEY, "tournamentId" TEXT, "teamA" JSONB, "teamB" JSONB, status TEXT, "currentInnings" INTEGER, innings JSONB, "startTime" TEXT, venue TEXT, "maxOvers" INTEGER, "winnerId" TEXT, "resultSummary" TEXT);
 ALTER TABLE config DISABLE ROW LEVEL SECURITY; ALTER TABLE users DISABLE ROW LEVEL SECURITY; ALTER TABLE teams DISABLE ROW LEVEL SECURITY; ALTER TABLE players DISABLE ROW LEVEL SECURITY; ALTER TABLE matches DISABLE ROW LEVEL SECURITY;`;
 
   const fetchData = async () => {
@@ -104,10 +104,12 @@ ALTER TABLE config DISABLE ROW LEVEL SECURITY; ALTER TABLE users DISABLE ROW LEV
   };
 
   const handleCreatePlayer = async () => {
-    if (!newPlayer.name || !newPlayer.teamId) { alert("Please enter name and select a team."); return; }
+    if (!newPlayer.name || !newPlayer.teamId) { alert("Please enter name and ensure team is selected."); return; }
     await databaseService.createPlayer(newPlayer);
     setShowPlayerModal(false);
-    setNewPlayer({ name: '', teamId: selectedTeam?.id || '', battingStyle: 'Right Hand', bowlingStyle: 'Right Arm Fast', role: 'Batsman' });
+    const tid = newPlayer.teamId;
+    setNewPlayer({ name: '', teamId: tid, battingStyle: 'Right Hand', bowlingStyle: 'Right Arm Fast', role: 'Batsman' });
+    // Trigger direct state update for immediate feedback
     fetchData();
   };
 
@@ -175,7 +177,7 @@ ALTER TABLE config DISABLE ROW LEVEL SECURITY; ALTER TABLE users DISABLE ROW LEV
       </div>
 
       <div className="bg-white rounded-[2.5rem] shadow-2xl border border-slate-100 overflow-hidden min-h-[500px]">
-        {loading ? (
+        {loading && !players.length && !teams.length ? (
           <div className="flex justify-center items-center h-64"><div className="animate-spin rounded-full h-10 w-10 border-b-2 border-pramukh-navy"></div></div>
         ) : (
           <>
@@ -231,7 +233,10 @@ ALTER TABLE config DISABLE ROW LEVEL SECURITY; ALTER TABLE users DISABLE ROW LEV
                          <div className="space-y-4 mt-6">
                             <label className="text-[10px] font-black text-slate-400 uppercase text-left block ml-1">Team Logo (URL or Base64)</label>
                             <input type="text" className="w-full px-4 py-3 bg-white border-2 border-slate-100 rounded-xl text-xs font-black italic" placeholder="Paste Logo here" defaultValue={selectedTeam.logoUrl} onBlur={(e) => handleUpdateTeamLogo(selectedTeam.id, e.target.value)} />
-                            <button onClick={() => { setNewPlayer({...newPlayer, teamId: selectedTeam.id}); setShowPlayerModal(true); }} className="w-full bg-pramukh-red text-white font-black py-4 rounded-xl uppercase text-xs tracking-widest italic shadow-lg">Add Player to Squad</button>
+                            <button onClick={() => { 
+                              setNewPlayer(prev => ({ ...prev, teamId: selectedTeam.id })); 
+                              setShowPlayerModal(true); 
+                            }} className="w-full bg-pramukh-red text-white font-black py-4 rounded-xl uppercase text-xs tracking-widest italic shadow-lg">Add Player to Squad</button>
                          </div>
                       </div>
                    </div>

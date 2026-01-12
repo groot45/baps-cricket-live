@@ -59,9 +59,13 @@ export const databaseService = {
 
   async createPlayer(player: Partial<Player>): Promise<Player> {
     const newPlayer = { ...player, id: `p_${Date.now()}` };
-    if (supabase && !this.isOffline) await supabase.from('players').insert(newPlayer);
+    if (supabase && !this.isOffline) {
+      const { error } = await supabase.from('players').insert(newPlayer);
+      if (error) console.error("Supabase Player Error:", error);
+    }
     const players = getLocal('players') || [];
-    saveLocal('players', [...players, newPlayer]);
+    const updatedPlayers = [...players, newPlayer];
+    saveLocal('players', updatedPlayers);
     return newPlayer as Player;
   },
 
@@ -111,6 +115,7 @@ export const databaseService = {
       id: `m_${Date.now()}`, 
       status: 'UPCOMING',
       currentInnings: 1,
+      maxOvers: 20,
       innings: [{ 
         battingTeamId: match.teamA.id, 
         bowlingTeamId: match.teamB.id, 
@@ -135,9 +140,11 @@ export const databaseService = {
     if (idx === -1) throw new Error("Match not found");
     const match = { ...matches[idx] };
     const cur = match.innings[match.currentInnings - 1];
+    
     if (updates.strikerId) cur.strikerId = updates.strikerId;
     if (updates.nonStrikerId) cur.nonStrikerId = updates.nonStrikerId;
     if (updates.currentBowlerId) cur.currentBowlerId = updates.currentBowlerId;
+
     const players = await this.getPlayers();
     [cur.strikerId, cur.nonStrikerId].forEach(id => {
       if (id && !cur.batsmenStats.find(s => s.playerId === id)) {
@@ -149,7 +156,58 @@ export const databaseService = {
         const p = players.find(x => x.id === cur.currentBowlerId);
         if (p) cur.bowlerStats.push({ playerId: p.id, name: p.name, overs: 0, balls: 0, runs: 0, wickets: 0 });
     }
+    
     if (supabase && !this.isOffline) await supabase.from('matches').update({ innings: match.innings }).eq('id', matchId);
+    matches[idx] = match;
+    saveLocal('matches', matches);
+    return match;
+  },
+
+  async switchInnings(matchId: string): Promise<Match> {
+    const matches = await this.getMatches();
+    const idx = matches.findIndex(m => m.id === matchId);
+    if (idx === -1) throw new Error("Match not found");
+    const match = { ...matches[idx] };
+    if (match.currentInnings >= 2) return match;
+
+    const firstInning = match.innings[0];
+    const newInning: Inning = {
+      battingTeamId: firstInning.bowlingTeamId,
+      bowlingTeamId: firstInning.battingTeamId,
+      runs: 0,
+      wickets: 0,
+      overs: 0,
+      balls: 0,
+      oversHistory: [],
+      batsmenStats: [],
+      bowlerStats: []
+    };
+
+    match.innings.push(newInning);
+    match.currentInnings = 2;
+    match.status = 'LIVE';
+
+    if (supabase && !this.isOffline) await supabase.from('matches').update({ 
+      innings: match.innings, 
+      currentInnings: 2, 
+      status: 'LIVE' 
+    }).eq('id', matchId);
+    
+    matches[idx] = match;
+    saveLocal('matches', matches);
+    return match;
+  },
+
+  async completeMatch(matchId: string, winnerId: string, resultSummary: string): Promise<Match> {
+    const matches = await this.getMatches();
+    const idx = matches.findIndex(m => m.id === matchId);
+    if (idx === -1) throw new Error("Match not found");
+    const match = { ...matches[idx] };
+    match.status = 'COMPLETED';
+    match.winnerId = winnerId;
+    match.resultSummary = resultSummary;
+
+    if (supabase && !this.isOffline) await supabase.from('matches').update({ status: 'COMPLETED', winnerId, resultSummary }).eq('id', matchId);
     matches[idx] = match;
     saveLocal('matches', matches);
     return match;
@@ -160,10 +218,14 @@ export const databaseService = {
     const idx = matches.findIndex(m => m.id === matchId);
     if (idx === -1) throw new Error("Match not found");
     const match = { ...matches[idx] };
+    match.status = 'LIVE'; 
     const cur = match.innings[match.currentInnings - 1];
+    
     if (scoreUpdate.isWicket) cur.wickets += 1;
     else cur.runs += scoreUpdate.run;
+
     if (scoreUpdate.extraType === 'wide' || scoreUpdate.extraType === 'no-ball') cur.runs += 1;
+    
     if (cur.strikerId) {
       let bStat = cur.batsmenStats.find(s => s.playerId === cur.strikerId);
       if (bStat) {
@@ -204,7 +266,8 @@ export const databaseService = {
       cur.strikerId = cur.nonStrikerId;
       cur.nonStrikerId = temp;
     }
-    if (supabase && !this.isOffline) await supabase.from('matches').update({ innings: match.innings }).eq('id', matchId);
+
+    if (supabase && !this.isOffline) await supabase.from('matches').update({ innings: match.innings, status: 'LIVE' }).eq('id', matchId);
     matches[idx] = match;
     saveLocal('matches', matches);
     return match;

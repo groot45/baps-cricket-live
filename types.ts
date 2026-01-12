@@ -102,4 +102,7 @@ export interface Match {
   startTime: string;
   venue: string;
   scorerId?: string;
+  maxOvers: number;
+  winnerId?: string;
+  resultSummary?: string;
 }

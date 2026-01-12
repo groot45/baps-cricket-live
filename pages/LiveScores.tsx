@@ -25,7 +25,7 @@ const LiveScores: React.FC = () => {
 
   useEffect(() => {
     fetchMatches();
-    const interval = setInterval(fetchMatches, 5000); // 5 second refresh for live tracking
+    const interval = setInterval(fetchMatches, 5000); 
     return () => clearInterval(interval);
   }, []);
 
@@ -71,6 +71,11 @@ const LiveScores: React.FC = () => {
           const striker = inning?.batsmenStats?.find(b => b.playerId === inning.strikerId);
           const nonStriker = inning?.batsmenStats?.find(b => b.playerId === inning.nonStrikerId);
           const bowler = inning?.bowlerStats?.find(b => b.playerId === inning.currentBowlerId);
+          const target = match.currentInnings === 2 ? (match.innings[0].runs + 1) : null;
+          const runsNeeded = target !== null ? (target - (inning?.runs || 0)) : null;
+          const totalBalls = match.maxOvers * 6;
+          const currentBalls = (inning?.overs || 0) * 6 + (inning?.balls || 0);
+          const ballsRemaining = totalBalls - currentBalls;
 
           return (
             <div key={match.id} className={`bg-white rounded-[3.5rem] shadow-[0_30px_70px_rgba(0,0,0,0.2)] overflow-hidden border-4 ${match.status === 'LIVE' ? 'border-pramukh-red' : 'border-white'}`}>
@@ -78,7 +83,7 @@ const LiveScores: React.FC = () => {
                 {/* MATCH HEADER */}
                 <div className="flex justify-between items-center mb-10 pb-8 border-b-2 border-slate-50">
                   <div className="flex items-center space-x-4">
-                     <span className={`px-4 py-1.5 rounded-full text-[11px] font-black uppercase tracking-widest ${match.status === 'LIVE' ? 'bg-red-600 text-white animate-pulse' : 'bg-slate-100 text-slate-400'}`}>
+                     <span className={`px-4 py-1.5 rounded-full text-[11px] font-black uppercase tracking-widest ${match.status === 'LIVE' ? 'bg-red-600 text-white animate-pulse' : match.status === 'COMPLETED' ? 'bg-green-600 text-white' : 'bg-slate-100 text-slate-400'}`}>
                        {match.status}
                      </span>
                      <span className="text-slate-400 font-black uppercase text-xs tracking-widest italic">{match.venue}</span>
@@ -88,9 +93,14 @@ const LiveScores: React.FC = () => {
                   </div>
                 </div>
 
+                {match.status === 'COMPLETED' && (
+                  <div className="bg-pramukh-red/10 border-2 border-pramukh-red/20 p-6 rounded-3xl mb-10 text-center">
+                    <h3 className="text-pramukh-red font-black text-3xl uppercase italic tracking-tighter">{match.resultSummary}</h3>
+                  </div>
+                )}
+
                 {/* MAIN SCOREBOARD */}
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 items-center">
-                  {/* TEAMS AND MAIN TOTAL */}
                   <div className="lg:col-span-7 flex flex-col space-y-6">
                     <div className="flex items-center justify-between">
                        <div className="flex items-center space-x-6">
@@ -117,30 +127,32 @@ const LiveScores: React.FC = () => {
                     </div>
                   </div>
 
-                  {/* BIG TOTAL BOX */}
                   <div className="lg:col-span-5 bg-pramukh-navy rounded-[3rem] p-10 text-white shadow-2xl border-b-[16px] border-pramukh-red relative overflow-hidden">
                      <div className="relative z-10">
-                        <div className="text-[10px] font-black uppercase tracking-[0.4em] text-white/40 mb-2 italic">LIVE MATCH TOTAL</div>
+                        <div className="text-[10px] font-black uppercase tracking-[0.4em] text-white/40 mb-2 italic">
+                          {match.status === 'COMPLETED' ? 'FINAL MATCH SCORE' : 'LIVE MATCH TOTAL'}
+                        </div>
                         <div className="text-9xl font-black italic tracking-tighter leading-none mb-4">
                            {inning?.runs || 0}<span className="text-pramukh-red mx-1">/</span>{inning?.wickets || 0}
                         </div>
                         <div className="flex items-end justify-between">
                            <div>
                               <div className="text-4xl font-black text-slate-400 italic leading-none">{inning?.overs || 0}.{inning?.balls || 0}</div>
-                              <div className="text-[9px] font-black uppercase tracking-[0.3em] opacity-30 mt-1">OVERS COMPLETED</div>
+                              <div className="text-[9px] font-black uppercase tracking-[0.3em] opacity-30 mt-1">OVERS</div>
                            </div>
                            <div className="text-right">
-                              <div className="text-sm font-black text-pramukh-red uppercase italic tracking-widest">Target: 145</div>
+                              {target && <div className="text-sm font-black text-pramukh-red uppercase italic tracking-widest">Target: {target}</div>}
+                              {target && runsNeeded !== null && runsNeeded > 0 && ballsRemaining > 0 && (
+                                <div className="text-[10px] font-black uppercase text-white/40 mt-1">Need {runsNeeded} off {ballsRemaining} balls</div>
+                              )}
                            </div>
                         </div>
                      </div>
                   </div>
                 </div>
 
-                {/* PROJECTOR PLAYER BOARD (Only visible if LIVE) */}
                 {match.status === 'LIVE' && (
                   <div className="mt-12 grid grid-cols-1 md:grid-cols-2 gap-8">
-                     {/* BATSMEN BOARD */}
                      <div className="bg-slate-50 p-8 rounded-[2.5rem] border-2 border-slate-100 shadow-inner">
                         <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] mb-6 flex items-center">
                            <i className="fas fa-baseball-bat-ball mr-2 text-pramukh-red"></i> BATSMEN AT CREASE
@@ -163,7 +175,6 @@ const LiveScores: React.FC = () => {
                         </div>
                      </div>
 
-                     {/* BOWLING BOARD */}
                      <div className="bg-slate-50 p-8 rounded-[2.5rem] border-2 border-slate-100 shadow-inner">
                         <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] mb-6 flex items-center">
                            <i className="fas fa-bullseye mr-2 text-pramukh-red"></i> LIVE BOWLER figures
