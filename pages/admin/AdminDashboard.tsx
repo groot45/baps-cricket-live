@@ -20,6 +20,7 @@ const AdminDashboard: React.FC = () => {
   const [sbUrl, setSbUrl] = useState(localStorage.getItem('sb_url') || '');
   const [sbKey, setSbKey] = useState(localStorage.getItem('sb_key') || '');
   const [tempConfig, setTempConfig] = useState<TournamentConfig>(config);
+  const [saveLoading, setSaveLoading] = useState(false);
 
   const [showMatchModal, setShowMatchModal] = useState(false);
   const [showTeamModal, setShowTeamModal] = useState(false);
@@ -54,10 +55,10 @@ ALTER TABLE config DISABLE ROW LEVEL SECURITY; ALTER TABLE users DISABLE ROW LEV
         databaseService.getMatches(),
         databaseService.getUsers()
       ]);
-      setTeams(t);
-      setPlayers(p);
-      setMatches(m);
-      setUsers(u);
+      setTeams(t || []);
+      setPlayers(p || []);
+      setMatches(m || []);
+      setUsers(u || []);
       setDbStatus({ 
         connected: !databaseService.isOffline, 
         mode: databaseService.isOffline ? 'Local (Offline)' : (databaseService.isGlobalConfig ? 'Global Live Mode' : 'Supabase (Live)'),
@@ -119,8 +120,15 @@ ALTER TABLE config DISABLE ROW LEVEL SECURITY; ALTER TABLE users DISABLE ROW LEV
   };
 
   const handleSaveSettings = async () => {
-    await updateConfig(tempConfig);
-    alert("Branding Settings Updated!");
+    setSaveLoading(true);
+    try {
+      await updateConfig(tempConfig);
+      alert("Branding Settings Updated Successfully!");
+    } catch (e) {
+      alert("Failed to update settings.");
+    } finally {
+      setSaveLoading(false);
+    }
   };
 
   const handleCreateMatch = async () => {
@@ -221,8 +229,8 @@ ALTER TABLE config DISABLE ROW LEVEL SECURITY; ALTER TABLE users DISABLE ROW LEV
                          </div>
                          <h2 className="text-3xl font-black text-pramukh-navy uppercase italic tracking-tighter mb-2">{selectedTeam.name}</h2>
                          <div className="space-y-4 mt-6">
-                            <label className="text-[10px] font-black text-slate-400 uppercase text-left block ml-1">Logo Image URL</label>
-                            <input type="text" className="w-full px-4 py-3 bg-white border-2 border-slate-100 rounded-xl text-xs font-black italic" placeholder="Paste Logo URL here" defaultValue={selectedTeam.logoUrl} onBlur={(e) => handleUpdateTeamLogo(selectedTeam.id, e.target.value)} />
+                            <label className="text-[10px] font-black text-slate-400 uppercase text-left block ml-1">Team Logo (URL or Base64)</label>
+                            <input type="text" className="w-full px-4 py-3 bg-white border-2 border-slate-100 rounded-xl text-xs font-black italic" placeholder="Paste Logo here" defaultValue={selectedTeam.logoUrl} onBlur={(e) => handleUpdateTeamLogo(selectedTeam.id, e.target.value)} />
                             <button onClick={() => { setNewPlayer({...newPlayer, teamId: selectedTeam.id}); setShowPlayerModal(true); }} className="w-full bg-pramukh-red text-white font-black py-4 rounded-xl uppercase text-xs tracking-widest italic shadow-lg">Add Player to Squad</button>
                          </div>
                       </div>
@@ -246,12 +254,14 @@ ALTER TABLE config DISABLE ROW LEVEL SECURITY; ALTER TABLE users DISABLE ROW LEV
               <div className="p-10 space-y-8">
                  <div className="flex justify-between items-center border-b-2 border-slate-50 pb-6">
                     <h3 className="text-xl font-black text-pramukh-navy uppercase italic">STAFF & SCORERS</h3>
-                    <button onClick={() => setShowUserModal(true)} className="bg-pramukh-navy text-white px-6 py-2 rounded-xl text-xs font-black uppercase italic tracking-widest">New User</button>
+                    <button onClick={() => setShowUserModal(true)} className="bg-pramukh-navy text-white px-6 py-2 rounded-xl text-xs font-black uppercase italic tracking-widest">Add Staff</button>
                  </div>
                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     {users.map(u => (
                       <div key={u.id} className="bg-slate-50 p-6 rounded-[2rem] border-2 border-slate-100 flex items-center space-x-4">
-                         <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center text-pramukh-navy shadow-sm border border-slate-100"><i className="fas fa-user-shield"></i></div>
+                         <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center text-pramukh-navy shadow-sm border border-slate-100 font-black italic">
+                            {u.username[0].toUpperCase()}
+                         </div>
                          <div>
                             <div className="font-black text-slate-800 uppercase italic">{u.username}</div>
                             <div className="text-[10px] text-pramukh-red font-black uppercase tracking-widest">{u.role}</div>
@@ -274,25 +284,70 @@ ALTER TABLE config DISABLE ROW LEVEL SECURITY; ALTER TABLE users DISABLE ROW LEV
             )}
 
             {activeTab === 'settings' && (
-              <div className="p-12 space-y-12">
-                 <h3 className="text-2xl font-black text-pramukh-navy uppercase italic border-b-4 border-pramukh-red pb-4 w-fit">BRANDING & IDENTITY</h3>
-                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
-                    <div className="space-y-6">
-                       <div><label className="text-[10px] font-black text-slate-400 uppercase ml-2">Tournament Title</label><input type="text" className="w-full px-6 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-black italic uppercase" value={tempConfig.name} onChange={e => setTempConfig({...tempConfig, name: e.target.value})} /></div>
-                       <div className="grid grid-cols-2 gap-4">
-                          <div><label className="text-[10px] font-black text-slate-400 uppercase ml-2">Short Name</label><input type="text" className="w-full px-6 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-black italic uppercase" value={tempConfig.shortName} onChange={e => setTempConfig({...tempConfig, shortName: e.target.value})} /></div>
-                          <div><label className="text-[10px] font-black text-slate-400 uppercase ml-2">Location</label><input type="text" className="w-full px-6 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-black italic uppercase" value={tempConfig.location} onChange={e => setTempConfig({...tempConfig, location: e.target.value})} /></div>
-                       </div>
-                       <div className="space-y-4 pt-6 border-t-2 border-slate-50">
-                          <h4 className="text-xs font-black text-pramukh-navy uppercase tracking-widest">BAPS Branding Assets (Cloud URLs)</h4>
-                          <div><label className="text-[10px] font-black text-slate-400 uppercase ml-2">Full Logo Image</label><input type="text" className="w-full px-6 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-black italic" value={tempConfig.bapsFullLogo} onChange={e => setTempConfig({...tempConfig, bapsFullLogo: e.target.value})} /></div>
-                          <div><label className="text-[10px] font-black text-slate-400 uppercase ml-2">Symbol Image</label><input type="text" className="w-full px-6 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-black italic" value={tempConfig.bapsSymbol} onChange={e => setTempConfig({...tempConfig, bapsSymbol: e.target.value})} /></div>
-                       </div>
-                       <button onClick={handleSaveSettings} className="bg-pramukh-navy text-white font-black px-12 py-5 rounded-2xl uppercase italic tracking-widest shadow-xl hover:scale-105 transition-all w-full lg:w-fit">Update Global Branding</button>
+              <div className="p-10 lg:p-14 space-y-12">
+                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 border-b-4 border-slate-100 pb-8">
+                    <div>
+                       <h3 className="text-3xl font-black text-pramukh-navy uppercase italic tracking-tighter">BRANDING SUITE</h3>
+                       <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest mt-1">Configure logos and event details</p>
                     </div>
-                    <div className="bg-slate-50 p-10 rounded-[3rem] border-2 border-slate-100 flex flex-col items-center justify-center text-center">
-                       <div className="w-32 h-32 bg-white rounded-3xl shadow-lg border-2 border-slate-200 mb-6 overflow-hidden flex items-center justify-center font-black text-pramukh-navy">Preview</div>
-                       <p className="text-[10px] text-slate-400 font-black uppercase italic tracking-widest">Header Logo Preview</p>
+                    <button onClick={handleSaveSettings} disabled={saveLoading} className="bg-pramukh-navy text-white font-black px-12 py-5 rounded-2xl uppercase italic tracking-widest shadow-xl hover:scale-105 transition-all disabled:opacity-50">
+                       {saveLoading ? 'SAVING...' : 'SAVE ALL CHANGES'}
+                    </button>
+                 </div>
+
+                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-12">
+                    <div className="lg:col-span-7 space-y-8">
+                       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                          <div className="space-y-2">
+                             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Tournament Name</label>
+                             <input type="text" className="w-full px-6 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-black italic uppercase" value={tempConfig.name} onChange={e => setTempConfig({...tempConfig, name: e.target.value})} />
+                          </div>
+                          <div className="space-y-2">
+                             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Short Name (Navbar)</label>
+                             <input type="text" className="w-full px-6 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-black italic uppercase" value={tempConfig.shortName} onChange={e => setTempConfig({...tempConfig, shortName: e.target.value})} />
+                          </div>
+                       </div>
+
+                       <div className="space-y-6 pt-6 border-t-2 border-slate-50">
+                          <div className="space-y-2">
+                             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Tournament Main Logo (URL or Base64)</label>
+                             <textarea rows={3} className="w-full px-6 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-black text-xs h-24" value={tempConfig.logoUrl} onChange={e => setTempConfig({...tempConfig, logoUrl: e.target.value})} placeholder="data:image/png;base64,..." />
+                          </div>
+                          <div className="space-y-2">
+                             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">BAPS Full Logo (URL or Base64)</label>
+                             <textarea rows={3} className="w-full px-6 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-black text-xs h-24" value={tempConfig.bapsFullLogo} onChange={e => setTempConfig({...tempConfig, bapsFullLogo: e.target.value})} placeholder="Paste BAPS Charities Logo here" />
+                          </div>
+                          <div className="space-y-2">
+                             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">BAPS Symbol (Favicon/Small Logo)</label>
+                             <textarea rows={3} className="w-full px-6 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-black text-xs h-24" value={tempConfig.bapsSymbol} onChange={e => setTempConfig({...tempConfig, bapsSymbol: e.target.value})} placeholder="Paste BAPS Symbol here" />
+                          </div>
+                       </div>
+                    </div>
+
+                    <div className="lg:col-span-5 space-y-6">
+                       <div className="bg-slate-50 p-8 rounded-[3rem] border-2 border-slate-100 flex flex-col items-center">
+                          <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] mb-8 italic">PREVIEW: MAIN HEADER</h4>
+                          <div className="bg-white p-6 rounded-[2rem] shadow-xl w-48 h-48 flex items-center justify-center border-4 border-pramukh-red/20 overflow-hidden">
+                             {tempConfig.logoUrl ? <img src={tempConfig.logoUrl} className="w-full h-full object-contain" /> : <i className="fas fa-image text-slate-200 text-6xl"></i>}
+                          </div>
+                          <p className="mt-4 text-[9px] font-black uppercase tracking-widest text-slate-400">Main Tournament Logo</p>
+                       </div>
+
+                       <div className="bg-slate-50 p-8 rounded-[3rem] border-2 border-slate-100 flex flex-col items-center">
+                          <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] mb-8 italic">PREVIEW: BRANDING</h4>
+                          <div className="flex gap-4">
+                             <div className="bg-white p-4 rounded-xl shadow-md w-24 h-24 flex items-center justify-center overflow-hidden border border-slate-100">
+                                {tempConfig.bapsSymbol ? <img src={tempConfig.bapsSymbol} className="w-full h-full object-contain" /> : <i className="fas fa-circle-nodes text-slate-200 text-2xl"></i>}
+                             </div>
+                             <div className="bg-pramukh-navy p-4 rounded-xl shadow-md flex-grow h-24 flex items-center justify-center overflow-hidden border border-white/10">
+                                {tempConfig.bapsFullLogo ? <img src={tempConfig.bapsFullLogo} className="w-full h-full object-contain invert" /> : <span className="text-white text-[8px] font-black uppercase">NO LOGO</span>}
+                             </div>
+                          </div>
+                          <div className="flex justify-between w-full mt-4 px-2">
+                             <span className="text-[8px] font-black uppercase text-slate-400">Symbol</span>
+                             <span className="text-[8px] font-black uppercase text-slate-400">Full Logo</span>
+                          </div>
+                       </div>
                     </div>
                  </div>
               </div>
@@ -358,7 +413,7 @@ ALTER TABLE config DISABLE ROW LEVEL SECURITY; ALTER TABLE users DISABLE ROW LEV
 
       {showUserModal && (
         <div className="fixed inset-0 bg-pramukh-navy/95 backdrop-blur-xl flex items-center justify-center p-6 z-[100]">
-          <div className="bg-white rounded-[3rem] w-full max-w-md p-12 shadow-2xl border-b-[16px] border-pramukh-red">
+          <div className="bg-white rounded-[3rem] w-full max-md p-12 shadow-2xl border-b-[16px] border-pramukh-red">
             <h2 className="text-3xl font-black text-pramukh-navy uppercase italic mb-8 text-center">NEW USER</h2>
             <div className="space-y-5">
               <input type="text" className="w-full px-6 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-black uppercase italic" placeholder="Username" value={newUser.username} onChange={e => setNewUser({...newUser, username: e.target.value})} />
