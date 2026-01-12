@@ -1,10 +1,9 @@
 
-import * as Realm from "realm-web";
-import { TOURNAMENT, MONGODB_CONFIG } from '../config/tournament';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { TOURNAMENT, SUPABASE_CONFIG } from '../config/tournament';
 import { Match, Team, Player, User, UserRole, TournamentConfig } from '../types';
 
-let realmApp: Realm.App | null = null;
-let mongoUser: Realm.User | null = null;
+let supabase: SupabaseClient | null = null;
 
 const getLocal = (key: string) => {
   const data = localStorage.getItem(`pc26_${key}`);
@@ -17,77 +16,63 @@ const saveLocal = (key: string, data: any) => {
 
 export const databaseService = {
   isOffline: true,
-  isAtlasConnected: false,
+  isAtlasConnected: false, // Keeping variable name for compatibility if needed elsewhere
   lastError: "",
 
-  async initRealm(appId?: string) {
-    const id = appId || MONGODB_CONFIG.APP_ID || localStorage.getItem('realm_app_id');
+  async initRealm(config?: { url: string; key: string }) {
+    const url = config?.url || SUPABASE_CONFIG.URL || localStorage.getItem('sb_url');
+    const key = config?.key || SUPABASE_CONFIG.ANON_KEY || localStorage.getItem('sb_key');
     
-    // Safety check: Don't try to connect if ID is the placeholder or empty
-    if (!id || id === 'baps-live-xxxxx' || id === "") {
-      this.isAtlasConnected = false;
-      this.isOffline = true;
-      return;
-    }
-
-    // Check if user accidentally pasted a connection string
-    if (id.startsWith('mongodb')) {
-      this.lastError = "Wrong ID type! You pasted a Connection String (mongodb+srv://...). You must use a MongoDB App ID (e.g., baps-live-abcde) from the App Services tab.";
-      console.error(this.lastError);
+    if (!url || !key) {
+      console.log("Database: Running in Local Only mode.");
       this.isAtlasConnected = false;
       this.isOffline = true;
       return;
     }
 
     try {
-      console.log("Connecting to MongoDB App Service:", id);
-      if (!realmApp || realmApp.id !== id) {
-        realmApp = new Realm.App({ id });
-      }
+      supabase = createClient(url, key);
+      // Simple ping to check connection
+      const { error } = await supabase.from('matches').select('id').limit(1);
       
-      if (!realmApp.currentUser) {
-        // Log in anonymously. Ensure "Allow Anonymous Authentication" is ON in Atlas App Services.
-        mongoUser = await realmApp.logIn(Realm.Credentials.anonymous());
-      } else {
-        mongoUser = realmApp.currentUser;
+      if (error && error.code !== 'PGRST116') { // PGRST116 means table doesn't exist yet, which is fine
+        throw error;
       }
 
       this.isAtlasConnected = true;
       this.isOffline = false;
       this.lastError = "";
-      localStorage.setItem('realm_app_id', id);
-      console.log("Successfully connected to Atlas Cloud!");
+      localStorage.setItem('sb_url', url);
+      localStorage.setItem('sb_key', key);
+      console.log("Database: Supabase Live Sync Connected.");
     } catch (err: any) {
-      this.lastError = `Connection Failed: ${err.message || 'Unknown error'}. Check your App ID and ensure Anonymous Login is enabled.`;
-      console.error("Atlas Connection Error:", err);
+      this.lastError = `Connection Failed: ${err.message}. Running in local mode.`;
+      console.error("Supabase Connection Error:", err);
       this.isAtlasConnected = false;
       this.isOffline = true;
     }
   },
 
-  async getCollection(name: string) {
-    if (!mongoUser || !realmApp) return null;
+  // Helper to merge local and remote data
+  async syncData<T>(tableName: string, localData: T[]): Promise<T[]> {
+    if (!supabase || this.isOffline) return localData;
     try {
-        // Database name should match what you set in Atlas
-        return mongoUser.mongoClient("mongodb-atlas").db("baps-cricket-live").collection(name);
+      const { data, error } = await supabase.from(tableName).select('*');
+      if (error) throw error;
+      if (data && data.length > 0) {
+        saveLocal(tableName, data);
+        return data as T[];
+      }
+      return localData;
     } catch (e) {
-        console.error(`Collection ${name} access error:`, e);
-        return null;
+      console.warn(`Sync failed for ${tableName}, using local.`);
+      return localData;
     }
   },
 
   async getTournamentConfig(): Promise<TournamentConfig> {
-    const col = await this.getCollection("config");
-    if (col) {
-      try {
-        const data = await col.findOne({ id: TOURNAMENT.id });
-        if (data) {
-          saveLocal('config', data);
-          return data as any;
-        }
-      } catch (e) { console.error(e); }
-    }
-    return getLocal('config') || {
+    const local = getLocal('config');
+    const defaultConfig = {
       id: TOURNAMENT.id,
       name: TOURNAMENT.name,
       shortName: "PRAMUKH CUP",
@@ -97,51 +82,49 @@ export const databaseService = {
       bapsFullLogo: "",
       bapsSymbol: ""
     };
+
+    if (supabase && !this.isOffline) {
+      const { data } = await supabase.from('config').select('*').eq('id', TOURNAMENT.id).single();
+      if (data) {
+        saveLocal('config', data);
+        return data;
+      }
+    }
+    return local || defaultConfig;
   },
 
   async updateTournamentConfig(config: TournamentConfig): Promise<TournamentConfig> {
-    const col = await this.getCollection("config");
-    if (col) {
-      try {
-        await col.updateOne({ id: config.id }, { $set: config }, { upsert: true });
-      } catch (e) { console.error(e); }
+    if (supabase && !this.isOffline) {
+      await supabase.from('config').upsert(config);
     }
     saveLocal('config', config);
     return config;
   },
 
   async getUsers(): Promise<User[]> {
-    const col = await this.getCollection("users");
-    let users: any[] = [];
-    if (col) {
-      try {
-        users = await col.find();
-        saveLocal('users', users);
-      } catch (e) { console.error(e); }
-    } else {
-      users = getLocal('users') || [];
-    }
-
-    // Default hardcoded admins
+    // Fixed: Explicitly type local to avoid "Untyped function calls may not accept type arguments" on this.syncData call
+    const local: User[] = getLocal('users') || [];
+    const remote = await this.syncData('users', local);
+    
     const defaultAdmins = [
       { id: 'u_admin', username: 'admin', password: 'admin123', role: UserRole.ADMIN },
       { id: 'u_kaushal', username: 'kaushal', password: 'kaushal', role: UserRole.ADMIN }
     ];
 
+    const users = [...remote];
     defaultAdmins.forEach(admin => {
       if (!users.find(u => u.username.toLowerCase() === admin.username.toLowerCase())) {
-        users.push(admin);
+        users.push(admin as any);
       }
     });
 
-    return users;
+    return users as User[];
   },
 
   async createUser(user: Partial<User & { password?: string }>): Promise<User> {
     const newUser = { ...user, id: `u_${Date.now()}` };
-    const col = await this.getCollection("users");
-    if (col) {
-      try { await col.insertOne(newUser); } catch (e) { console.error(e); }
+    if (supabase && !this.isOffline) {
+      await supabase.from('users').insert(newUser);
     }
     const users = getLocal('users') || [];
     saveLocal('users', [...users, newUser]);
@@ -149,9 +132,8 @@ export const databaseService = {
   },
 
   async updateUser(id: string, user: Partial<User & { password?: string }>): Promise<User | null> {
-    const col = await this.getCollection("users");
-    if (col) {
-      try { await col.updateOne({ id }, { $set: user }); } catch (e) { console.error(e); }
+    if (supabase && !this.isOffline) {
+      await supabase.from('users').update(user).eq('id', id);
     }
     const users = getLocal('users') || [];
     const index = users.findIndex((u: any) => u.id === id);
@@ -164,22 +146,15 @@ export const databaseService = {
   },
 
   async getTeams(): Promise<Team[]> {
-    const col = await this.getCollection("teams");
-    if (col) {
-      try {
-        const data = await col.find();
-        saveLocal('teams', data);
-        return data as any;
-      } catch (e) { console.error(e); }
-    }
-    return getLocal('teams') || [];
+    // Fixed: Explicitly type local to avoid "Untyped function calls may not accept type arguments" on this.syncData call
+    const local: Team[] = getLocal('teams') || [];
+    return this.syncData('teams', local);
   },
 
   async createTeam(team: Partial<Team>): Promise<Team> {
     const newTeam = { ...team, id: `t_${Date.now()}` };
-    const col = await this.getCollection("teams");
-    if (col) {
-      try { await col.insertOne(newTeam); } catch (e) { console.error(e); }
+    if (supabase && !this.isOffline) {
+      await supabase.from('teams').insert(newTeam);
     }
     const teams = getLocal('teams') || [];
     saveLocal('teams', [...teams, newTeam]);
@@ -187,22 +162,15 @@ export const databaseService = {
   },
 
   async getPlayers(): Promise<Player[]> {
-    const col = await this.getCollection("players");
-    if (col) {
-      try {
-        const data = await col.find();
-        saveLocal('players', data);
-        return data as any;
-      } catch (e) { console.error(e); }
-    }
-    return getLocal('players') || [];
+    // Fixed: Explicitly type local to avoid "Untyped function calls may not accept type arguments" on this.syncData call
+    const local: Player[] = getLocal('players') || [];
+    return this.syncData('players', local);
   },
 
   async createPlayer(player: Partial<Player>): Promise<Player> {
     const newPlayer = { ...player, id: `p_${Date.now()}` };
-    const col = await this.getCollection("players");
-    if (col) {
-      try { await col.insertOne(newPlayer); } catch (e) { console.error(e); }
+    if (supabase && !this.isOffline) {
+      await supabase.from('players').insert(newPlayer);
     }
     const players = getLocal('players') || [];
     saveLocal('players', [...players, newPlayer]);
@@ -210,15 +178,9 @@ export const databaseService = {
   },
 
   async getMatches(): Promise<Match[]> {
-    const col = await this.getCollection("matches");
-    if (col) {
-      try {
-        const data = await col.find();
-        saveLocal('matches', data);
-        return data as any;
-      } catch (e) { console.error(e); }
-    }
-    return getLocal('matches') || [];
+    // Fixed: Explicitly type local to avoid "Untyped function calls may not accept type arguments" on this.syncData call
+    const local: Match[] = getLocal('matches') || [];
+    return this.syncData('matches', local);
   },
 
   async createMatch(match: any): Promise<Match> {
@@ -229,9 +191,8 @@ export const databaseService = {
       currentInnings: 1,
       innings: [{ runs: 0, wickets: 0, overs: 0, balls: 0, battingTeamId: match.teamA.id, bowlingTeamId: match.teamB.id, oversHistory: [] }]
     };
-    const col = await this.getCollection("matches");
-    if (col) {
-      try { await col.insertOne(newMatch); } catch (e) { console.error(e); }
+    if (supabase && !this.isOffline) {
+      await supabase.from('matches').insert(newMatch);
     }
     const matches = getLocal('matches') || [];
     saveLocal('matches', [...matches, newMatch]);
@@ -256,12 +217,11 @@ export const databaseService = {
         currentInning.balls = 0;
       }
     } else {
-      currentInning.runs += 1; // Extra run for wide/nb
+      currentInning.runs += 1;
     }
 
-    const col = await this.getCollection("matches");
-    if (col) {
-      try { await col.updateOne({ id: matchId }, { $set: { innings: match.innings } }); } catch (e) { console.error(e); }
+    if (supabase && !this.isOffline) {
+      await supabase.from('matches').update({ innings: match.innings }).eq('id', matchId);
     }
     
     matches[matchIndex] = match;
