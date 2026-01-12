@@ -16,15 +16,21 @@ const saveLocal = (key: string, data: any) => {
 
 export const databaseService = {
   isOffline: true,
-  isAtlasConnected: false, // Legacy variable name kept for component compatibility
+  isAtlasConnected: false, 
   lastError: "",
+  isGlobalConfig: false,
 
   async initRealm(config?: { url: string; key: string }) {
-    const url = config?.url || SUPABASE_CONFIG.URL || localStorage.getItem('sb_url');
-    const key = config?.key || SUPABASE_CONFIG.ANON_KEY || localStorage.getItem('sb_key');
+    // 1. Check hardcoded config (Highest Priority - Syncs all devices)
+    // 2. Check manual UI config (Second Priority - Local only)
+    // 3. Check localStorage
+    const url = SUPABASE_CONFIG.URL || config?.url || localStorage.getItem('sb_url');
+    const key = SUPABASE_CONFIG.ANON_KEY || config?.key || localStorage.getItem('sb_key');
     
+    this.isGlobalConfig = !!(SUPABASE_CONFIG.URL && SUPABASE_CONFIG.ANON_KEY);
+
     if (!url || !key || url === "" || key === "") {
-      console.log("Database: Running in Local Only mode.");
+      console.log("Database: No credentials found. Running in Local Mode.");
       this.isAtlasConnected = false;
       this.isOffline = true;
       return;
@@ -33,13 +39,12 @@ export const databaseService = {
     try {
       supabase = createClient(url, key);
       
-      // Test connection by trying to fetch from 'matches'
+      // Test connectivity
       const { error } = await supabase.from('matches').select('id').limit(1);
       
       if (error) {
-        // Table doesn't exist (PGRST116 or 42P01)
         if (error.code === 'PGRST116' || error.message.includes('not find the table') || error.code === '42P01') {
-          this.lastError = "CONNECTED BUT SETUP INCOMPLETE: Your Supabase URL is correct, but the tables (matches, teams, etc.) haven't been created yet. Copy the SQL script from the Database tab and run it in your Supabase SQL Editor.";
+          this.lastError = "CONNECTED BUT NO TABLES: Run the SQL script in your Supabase Editor to create the matches/teams tables.";
           this.isAtlasConnected = false;
           this.isOffline = true;
           return;
@@ -50,11 +55,16 @@ export const databaseService = {
       this.isAtlasConnected = true;
       this.isOffline = false;
       this.lastError = "";
-      localStorage.setItem('sb_url', url);
-      localStorage.setItem('sb_key', key);
-      console.log("Database: Supabase Live Sync Connected.");
+      
+      // Only save to localStorage if it wasn't already hardcoded
+      if (!this.isGlobalConfig) {
+        localStorage.setItem('sb_url', url);
+        localStorage.setItem('sb_key', key);
+      }
+
+      console.log(`Database: ${this.isGlobalConfig ? 'Global' : 'Local'} Supabase Connected.`);
     } catch (err: any) {
-      this.lastError = `CONNECTION FAILED: ${err.message}. Ensure your URL/Key are correct and you've allowed public access.`;
+      this.lastError = `CONNECTION FAILED: ${err.message}.`;
       console.error("Supabase Connection Error:", err);
       this.isAtlasConnected = false;
       this.isOffline = true;
@@ -72,7 +82,6 @@ export const databaseService = {
       }
       return localData;
     } catch (e) {
-      console.warn(`Sync failed for ${tableName}, using local.`);
       return localData;
     }
   },
@@ -104,9 +113,7 @@ export const databaseService = {
 
   async updateTournamentConfig(config: TournamentConfig): Promise<TournamentConfig> {
     if (supabase && !this.isOffline) {
-      try {
-        await supabase.from('config').upsert(config);
-      } catch (e) {}
+      try { await supabase.from('config').upsert(config); } catch (e) {}
     }
     saveLocal('config', config);
     return config;
@@ -115,19 +122,16 @@ export const databaseService = {
   async getUsers(): Promise<User[]> {
     const local: User[] = getLocal('users') || [];
     const remote = await this.syncData('users', local);
-    
     const defaultAdmins = [
       { id: 'u_admin', username: 'admin', password: 'admin123', role: UserRole.ADMIN },
       { id: 'u_kaushal', username: 'kaushal', password: 'kaushal', role: UserRole.ADMIN }
     ];
-
     const users = [...remote];
     defaultAdmins.forEach(admin => {
       if (!users.find(u => u.username.toLowerCase() === admin.username.toLowerCase())) {
         users.push(admin as any);
       }
     });
-
     return users as User[];
   },
 
@@ -196,7 +200,7 @@ export const databaseService = {
       id: `m_${Date.now()}`, 
       status: 'UPCOMING',
       currentInnings: 1,
-      innings: [{ runs: 0, wickets: 0, overs: 0, balls: 0, battingTeamId: match.teamA.id, bowlingTeamId: match.teamB.id, oversHistory: [] }]
+      innings: [{ battingTeamId: match.teamA.id, bowlingTeamId: match.teamB.id, runs: 0, wickets: 0, overs: 0, balls: 0, oversHistory: [] }]
     };
     if (supabase && !this.isOffline) {
       try { await supabase.from('matches').insert(newMatch); } catch (e) {}

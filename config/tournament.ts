@@ -12,15 +12,15 @@ export const TOURNAMENT = {
 };
 
 /**
- * CLOUD SYNC CONFIGURATION (SUPABASE)
+ * GLOBAL LIVE SYNC CONFIGURATION
  * ----------------------------------------------------------------------------
- * The app works via LocalStorage by default. To enable Live Scoring for everyone:
- * 1. Create a free project at https://supabase.com
- * 2. Go to Project Settings > API
- * 3. Copy/Paste URL and Anon Key below.
+ * To make the app work on ALL devices automatically without any setup:
+ * 1. Create a project at https://supabase.com
+ * 2. Paste your URL and Anon Key below.
+ * 3. Once saved, every phone/tablet that opens this link will be LIVE instantly.
  * ----------------------------------------------------------------------------
  */
 export const SUPABASE_CONFIG = {
-  URL: "", // e.g., https://xyz.supabase.co
-  ANON_KEY: "" // e.g., your-long-anon-key
+  URL: "https://athwxzvfukarpkqpzjto.supabase.co", 
+  ANON_KEY: "sb_publishable_5yeXqqos1RdaYHaR2jiEpw_GaaJZrjM" // PASTE YOUR SUPABASE ANON KEY HERE
 };
