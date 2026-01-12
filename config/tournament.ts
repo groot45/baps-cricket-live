@@ -12,10 +12,11 @@ export const TOURNAMENT = {
   year: 2026
 };
 
-// NOTE: For security, the mongodb+srv:// URI should NEVER be used directly in frontend code.
-// We use the MongoDB Realm App ID to securely connect via the Web SDK.
+// MONGODB CONFIG
+// For Vercel deployment: Add VITE_MONGODB_APP_ID to your Vercel Environment Variables.
+// This allows the app to connect to your Atlas cluster 'nktsar9' securely.
 export const MONGODB_CONFIG = {
-  APP_ID: "", // To be set in Admin Panel > Settings
+  APP_ID: (import.meta as any).env?.VITE_MONGODB_APP_ID || "", 
   REGION: "us-east-1"
 };
 

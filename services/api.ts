@@ -1,6 +1,6 @@
 
 import * as Realm from "https://esm.sh/realm-web";
-import { API_BASE_URL, TOURNAMENT } from '../config/tournament';
+import { API_BASE_URL, TOURNAMENT, MONGODB_CONFIG } from '../config/tournament';
 import { Match, Team, Player, User, UserRole, TournamentConfig } from '../types';
 
 let realmApp: Realm.App | null = null;
@@ -19,41 +19,31 @@ export const databaseService = {
   isOffline: true,
   isAtlasConnected: false,
 
-  async initRealm(appId: string) {
-    if (!appId) return;
+  async initRealm(appId?: string) {
+    const id = appId || MONGODB_CONFIG.APP_ID || localStorage.getItem('realm_app_id');
+    if (!id) {
+      console.warn("No MongoDB App ID found. Running in Local Mode.");
+      return;
+    }
+
     try {
-      realmApp = new Realm.App({ id: appId });
-      // Authenticate anonymously for public/shared access
+      realmApp = new Realm.App({ id });
       mongoUser = await realmApp.logIn(Realm.Credentials.anonymous());
       this.isAtlasConnected = true;
       this.isOffline = false;
-      console.log("MongoDB Atlas Connected via Realm to cluster nktsar9");
+      if (appId) localStorage.setItem('realm_app_id', appId);
+      console.log(`MongoDB Atlas Connected: ${id}`);
     } catch (err) {
       console.error("MongoDB Atlas Connection Failed:", err);
       this.isAtlasConnected = false;
+      this.isOffline = true;
     }
   },
 
   async getCollection(name: string) {
     if (!mongoUser || !realmApp) return null;
-    // Using 'baps-cricket-live' as the database name based on user connection string
+    // Database name from your connection string
     return mongoUser.mongoClient("mongodb-atlas").db("baps-cricket-live").collection(name);
-  },
-
-  async request(endpoint: string, options: RequestInit = {}) {
-    try {
-      const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-        ...options,
-        headers: {
-          'Content-Type': 'application/json',
-          ...(options.headers || {}),
-        },
-      });
-      if (!response.ok) throw new Error('API Error');
-      return await response.json();
-    } catch (error) {
-      return null;
-    }
   },
 
   // TOURNAMENT CONFIG
@@ -99,7 +89,7 @@ export const databaseService = {
     }
     const local = getLocal('users');
     if (!local) {
-      // UPDATED: Default credentials set to kaushal / kaushal
+      // Master credentials: kaushal / kaushal
       const initial = [{ id: 'u_kaushal', username: 'kaushal', password: 'kaushal', role: UserRole.ADMIN }];
       saveLocal('users', initial);
       return initial;

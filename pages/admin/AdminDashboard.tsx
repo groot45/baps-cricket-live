@@ -43,7 +43,7 @@ const AdminDashboard: React.FC = () => {
       setUsers(u);
       setDbStatus({ 
         connected: databaseService.isAtlasConnected, 
-        mode: databaseService.isAtlasConnected ? 'Atlas Cloud' : 'LocalStorage Only' 
+        mode: databaseService.isAtlasConnected ? 'Atlas Cloud Active' : 'LocalStorage Only' 
       });
     } catch (err) {
       console.error("Critical Load Error:", err);
@@ -54,8 +54,7 @@ const AdminDashboard: React.FC = () => {
 
   useEffect(() => {
     if (isAdmin) {
-      if (mongoAppId) databaseService.initRealm(mongoAppId).then(() => fetchData());
-      else fetchData();
+      databaseService.initRealm().then(() => fetchData());
     }
   }, [isAdmin]);
 
@@ -65,7 +64,6 @@ const AdminDashboard: React.FC = () => {
 
   const handleConnectMongo = async () => {
     setLoading(true);
-    localStorage.setItem('realm_app_id', mongoAppId);
     await databaseService.initRealm(mongoAppId);
     await fetchData();
     setLoading(false);
@@ -180,38 +178,42 @@ const AdminDashboard: React.FC = () => {
                     <div className="bg-white w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6 shadow-xl text-pramukh-navy border-4 border-slate-50">
                        <i className={`fas fa-cloud-bolt text-3xl ${dbStatus.connected ? 'text-green-500' : 'text-slate-300'}`}></i>
                     </div>
-                    <h3 className="text-3xl font-black text-pramukh-navy uppercase italic mb-2 tracking-tighter">Atlas App Services</h3>
-                    <p className="text-slate-400 text-xs font-bold uppercase tracking-[0.3em] mb-10 max-w-md mx-auto">Enter your MongoDB Realm App ID to enable secure cloud synchronization for all tournament data.</p>
+                    <h3 className="text-3xl font-black text-pramukh-navy uppercase italic mb-2 tracking-tighter">Connect Atlas Cluster: <span className="text-pramukh-red">nktsar9</span></h3>
+                    <p className="text-slate-400 text-xs font-bold uppercase tracking-[0.3em] mb-10 max-w-md mx-auto">Standard MongoDB strings (mongodb+srv) are for backends. This frontend app uses **MongoDB App Services** to securely talk to your cluster.</p>
                     
                     <div className="max-w-md mx-auto space-y-4">
                        <input 
                          type="text" 
                          className="w-full px-8 py-5 bg-white border-2 border-slate-100 rounded-2xl font-black text-center text-xl tracking-widest focus:border-pramukh-navy outline-none shadow-inner" 
-                         placeholder="realm-app-id-xxxxx" 
+                         placeholder="Paste App ID (e.g. pc-live-abcde)" 
                          value={mongoAppId}
                          onChange={(e) => setMongoAppId(e.target.value)}
                        />
                        <button onClick={handleConnectMongo} className="w-full bg-pramukh-navy text-white font-black py-5 rounded-2xl uppercase italic tracking-widest shadow-xl hover:brightness-125 transition-all">
-                         Link Atlas Cluster
+                         Link App Service
                        </button>
                     </div>
                  </div>
 
-                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <div className="bg-white p-8 rounded-[2rem] border-2 border-slate-100 shadow-sm">
-                       <div className="text-slate-300 text-3xl mb-4"><i className="fas fa-microchip"></i></div>
-                       <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Compute Region</div>
-                       <div className="text-lg font-black text-slate-800 uppercase italic">AWS / Virginia (us-east-1)</div>
+                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                    <div className="bg-white p-10 rounded-[2.5rem] border-2 border-slate-100 shadow-sm">
+                       <h4 className="text-lg font-black text-pramukh-navy uppercase italic mb-6">How to get your App ID?</h4>
+                       <ol className="space-y-4 text-sm font-bold text-slate-500 list-decimal pl-6">
+                          <li>Login to **MongoDB Atlas**.</li>
+                          <li>Click **App Services** tab at the top.</li>
+                          <li>Create a new App (linked to your `nktsar9` cluster).</li>
+                          <li>In the App Dashboard, find your **App ID** (usually top-left).</li>
+                          <li>Under **Authentication**, enable "Allow Anonymous Login".</li>
+                          <li>Under **Rules**, add a collection `baps-cricket-live` and enable Read/Write permissions.</li>
+                       </ol>
                     </div>
-                    <div className="bg-white p-8 rounded-[2rem] border-2 border-slate-100 shadow-sm">
-                       <div className="text-slate-300 text-3xl mb-4"><i className="fas fa-database"></i></div>
-                       <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Data Collections</div>
-                       <div className="text-lg font-black text-slate-800 uppercase italic">Config, Matches, Teams, Users</div>
-                    </div>
-                    <div className="bg-white p-8 rounded-[2rem] border-2 border-slate-100 shadow-sm">
-                       <div className="text-slate-300 text-3xl mb-4"><i className="fas fa-shield-halved"></i></div>
-                       <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Security Mode</div>
-                       <div className="text-lg font-black text-slate-800 uppercase italic">Anonymous Auth / TLS 1.3</div>
+                    <div className="bg-pramukh-navy p-10 rounded-[2.5rem] shadow-xl text-white">
+                       <h4 className="text-lg font-black uppercase italic mb-6">Vercel Deployment Hint</h4>
+                       <p className="text-sm opacity-80 leading-relaxed mb-6 italic">To make this permanent for all users on your Vercel URL, go to Vercel Project Settings > Environment Variables and add:</p>
+                       <div className="bg-white/10 p-4 rounded-xl font-mono text-xs mb-4 break-all">
+                          VITE_MONGODB_APP_ID = your-app-id-here
+                       </div>
+                       <p className="text-[10px] uppercase font-black tracking-widest opacity-40">This prevents "Local Mode" on production.</p>
                     </div>
                  </div>
               </div>
