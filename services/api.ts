@@ -1,6 +1,10 @@
 
+import * as Realm from "https://esm.sh/realm-web";
 import { API_BASE_URL, TOURNAMENT } from '../config/tournament';
 import { Match, Team, Player, User, UserRole, TournamentConfig } from '../types';
+
+let realmApp: Realm.App | null = null;
+let mongoUser: Realm.User | null = null;
 
 const getLocal = (key: string) => {
   const data = localStorage.getItem(`pc26_${key}`);
@@ -12,7 +16,29 @@ const saveLocal = (key: string, data: any) => {
 };
 
 export const databaseService = {
-  isOffline: false,
+  isOffline: true,
+  isAtlasConnected: false,
+
+  async initRealm(appId: string) {
+    if (!appId) return;
+    try {
+      realmApp = new Realm.App({ id: appId });
+      // Authenticate anonymously for public/shared access
+      mongoUser = await realmApp.logIn(Realm.Credentials.anonymous());
+      this.isAtlasConnected = true;
+      this.isOffline = false;
+      console.log("MongoDB Atlas Connected via Realm to cluster nktsar9");
+    } catch (err) {
+      console.error("MongoDB Atlas Connection Failed:", err);
+      this.isAtlasConnected = false;
+    }
+  },
+
+  async getCollection(name: string) {
+    if (!mongoUser || !realmApp) return null;
+    // Using 'baps-cricket-live' as the database name based on user connection string
+    return mongoUser.mongoClient("mongodb-atlas").db("baps-cricket-live").collection(name);
+  },
 
   async request(endpoint: string, options: RequestInit = {}) {
     try {
@@ -24,22 +50,23 @@ export const databaseService = {
         },
       });
       if (!response.ok) throw new Error('API Error');
-      this.isOffline = false;
       return await response.json();
     } catch (error) {
-      console.warn(`Backend unreachable at ${endpoint}, using local fallback.`);
-      this.isOffline = true;
       return null;
     }
   },
 
   // TOURNAMENT CONFIG
   async getTournamentConfig(): Promise<TournamentConfig> {
-    const data = await this.request('/api/config');
-    if (data) {
-      saveLocal('config', data);
-      return data;
+    const col = await this.getCollection("config");
+    if (col) {
+      const data = await col.findOne({ id: TOURNAMENT.id });
+      if (data) {
+        saveLocal('config', data);
+        return data as any;
+      }
     }
+    
     const local = getLocal('config');
     return local || {
       id: TOURNAMENT.id,
@@ -47,28 +74,33 @@ export const databaseService = {
       shortName: "PRAMUKH CUP",
       year: TOURNAMENT.year,
       location: TOURNAMENT.location,
-      logoUrl: ""
+      logoUrl: "",
+      bapsFullLogo: "",
+      bapsSymbol: ""
     };
   },
 
   async updateTournamentConfig(config: TournamentConfig): Promise<TournamentConfig> {
-    const data = await this.request('/api/config', { method: 'POST', body: JSON.stringify(config) });
-    if (!data) {
-      saveLocal('config', config);
+    const col = await this.getCollection("config");
+    if (col) {
+      await col.updateOne({ id: config.id }, { $set: config }, { upsert: true });
     }
+    saveLocal('config', config);
     return config;
   },
 
-  // USERS / STAFF
+  // USERS
   async getUsers(): Promise<User[]> {
-    const data = await this.request('/api/users');
-    if (data) {
+    const col = await this.getCollection("users");
+    if (col) {
+      const data = await col.find();
       saveLocal('users', data);
-      return data;
+      return data as any;
     }
     const local = getLocal('users');
     if (!local) {
-      const initial = [{ id: 'u_admin', username: 'admin', password: 'admin123', role: UserRole.ADMIN }];
+      // UPDATED: Default credentials set to kaushal / kaushal
+      const initial = [{ id: 'u_kaushal', username: 'kaushal', password: 'kaushal', role: UserRole.ADMIN }];
       saveLocal('users', initial);
       return initial;
     }
@@ -76,22 +108,26 @@ export const databaseService = {
   },
 
   async createUser(user: Partial<User & { password?: string }>): Promise<User> {
-    const data = await this.request('/api/users', { method: 'POST', body: JSON.stringify(user) });
-    const users = await this.getUsers();
-    const newUser = data || { ...user, id: `u_${Date.now()}` };
-    if (!data) {
-      saveLocal('users', [...users, newUser]);
+    const newUser = { ...user, id: `u_${Date.now()}` };
+    const col = await this.getCollection("users");
+    if (col) {
+      await col.insertOne(newUser);
     }
+    const users = await this.getUsers();
+    if (!col) saveLocal('users', [...users, newUser]);
     return newUser as User;
   },
 
   async updateUser(userId: string, updates: Partial<User & { password?: string }>): Promise<User> {
-    const data = await this.request(`/api/users/${userId}`, { method: 'PUT', body: JSON.stringify(updates) });
+    const col = await this.getCollection("users");
+    if (col) {
+      await col.updateOne({ id: userId }, { $set: updates });
+    }
     const users = await this.getUsers();
     const index = users.findIndex(u => u.id === userId);
     if (index !== -1) {
       const updated = { ...users[index], ...updates };
-      if (!data) {
+      if (!col) {
         users[index] = updated;
         saveLocal('users', users);
       }
@@ -102,74 +138,66 @@ export const databaseService = {
 
   // TEAMS
   async getTeams(): Promise<Team[]> {
-    const data = await this.request('/api/teams');
-    if (data) {
+    const col = await this.getCollection("teams");
+    if (col) {
+      const data = await col.find();
       saveLocal('teams', data);
-      return data;
+      return data as any;
     }
     return getLocal('teams') || [];
   },
 
   async createTeam(team: Partial<Team>): Promise<Team> {
-    const data = await this.request('/api/teams', { method: 'POST', body: JSON.stringify(team) });
-    const teams = await this.getTeams();
-    const newTeam = data || { ...team, id: `t_${Date.now()}` };
-    if (!data) {
-      saveLocal('teams', [...teams, newTeam]);
+    const newTeam = { ...team, id: `t_${Date.now()}` };
+    const col = await this.getCollection("teams");
+    if (col) {
+      await col.insertOne(newTeam);
     }
-    return newTeam;
+    const teams = await this.getTeams();
+    if (!col) saveLocal('teams', [...teams, newTeam]);
+    return newTeam as Team;
   },
 
   // PLAYERS
   async getPlayers(): Promise<Player[]> {
-    const data = await this.request('/api/players');
-    if (data) {
+    const col = await this.getCollection("players");
+    if (col) {
+      const data = await col.find();
       saveLocal('players', data);
-      return data;
+      return data as any;
     }
     return getLocal('players') || [];
   },
 
-  async createPlayer(player: Partial<Player>): Promise<Player> {
-    const data = await this.request('/api/players', { method: 'POST', body: JSON.stringify(player) });
-    const players = await this.getPlayers();
-    const newPlayer = data || { ...player, id: `p_${Date.now()}` };
-    if (!data) {
-      saveLocal('players', [...players, newPlayer]);
-    }
-    return newPlayer;
-  },
-
   // MATCHES
   async getMatches(): Promise<Match[]> {
-    const data = await this.request('/api/matches');
-    if (data) {
+    const col = await this.getCollection("matches");
+    if (col) {
+      const data = await col.find();
       saveLocal('matches', data);
-      return data;
+      return data as any;
     }
     return getLocal('matches') || [];
   },
 
   async createMatch(match: any): Promise<Match> {
-    const data = await this.request('/api/matches', { method: 'POST', body: JSON.stringify(match) });
-    const matches = await this.getMatches();
-    const newMatch = data || { 
+    const newMatch = { 
       ...match, 
       id: `m_${Date.now()}`, 
       status: 'UPCOMING',
       currentInnings: 1,
       innings: [{ runs: 0, wickets: 0, overs: 0, balls: 0 }]
     };
-    if (!data) {
-      saveLocal('matches', [...matches, newMatch]);
+    const col = await this.getCollection("matches");
+    if (col) {
+      await col.insertOne(newMatch);
     }
-    return newMatch;
+    const matches = await this.getMatches();
+    if (!col) saveLocal('matches', [...matches, newMatch]);
+    return newMatch as Match;
   },
 
   async updateMatchScore(matchId: string, scoreUpdate: any): Promise<Match> {
-    const data = await this.request(`/api/matches/${matchId}/score`, { method: 'POST', body: JSON.stringify(scoreUpdate) });
-    if (data) return data;
-
     const matches = await this.getMatches();
     const matchIndex = matches.findIndex(m => m.id === matchId);
     if (matchIndex === -1) throw new Error("Match not found");
@@ -193,6 +221,11 @@ export const databaseService = {
       currentInning.runs += 1;
     }
 
+    const col = await this.getCollection("matches");
+    if (col) {
+      await col.updateOne({ id: matchId }, { $set: { innings: match.innings } });
+    }
+    
     matches[matchIndex] = match;
     saveLocal('matches', matches);
     return match;
