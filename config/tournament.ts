@@ -13,8 +13,9 @@ export const TOURNAMENT = {
 };
 
 // MONGODB CONFIG
-// For Vercel deployment: Add VITE_MONGODB_APP_ID to your Vercel Environment Variables.
-// This allows the app to connect to your Atlas cluster 'nktsar9' securely.
+// 1. Go to MongoDB Atlas > App Services
+// 2. Create an App and Copy the "App ID" (e.g., baps-live-abcde)
+// 3. Paste it below or add it as VITE_MONGODB_APP_ID in Vercel.
 export const MONGODB_CONFIG = {
   APP_ID: (import.meta as any).env?.VITE_MONGODB_APP_ID || "", 
   REGION: "us-east-1"

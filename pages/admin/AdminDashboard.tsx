@@ -21,10 +21,12 @@ const AdminDashboard: React.FC = () => {
 
   const [showMatchModal, setShowMatchModal] = useState(false);
   const [showTeamModal, setShowTeamModal] = useState(false);
+  const [showPlayerModal, setShowPlayerModal] = useState(false);
   const [showUserModal, setShowUserModal] = useState(false);
 
   const [editingUser, setEditingUser] = useState<any>(null);
   const [newTeam, setNewTeam] = useState({ name: '', shortName: '', logoUrl: '' });
+  const [newPlayer, setNewPlayer] = useState({ name: '' });
   const [newMatch, setNewMatch] = useState({ teamAId: '', teamBId: '', venue: 'Indoor Arena 1', date: '' });
   const [newUser, setNewUser] = useState({ username: '', password: '', role: UserRole.SCORER });
 
@@ -86,6 +88,14 @@ const AdminDashboard: React.FC = () => {
     fetchData();
   };
 
+  const handleCreatePlayer = async () => {
+    if (!newPlayer.name) return;
+    await databaseService.createPlayer(newPlayer);
+    setShowPlayerModal(false);
+    setNewPlayer({ name: '' });
+    fetchData();
+  };
+
   const handleCreateUser = async () => {
     if (!newUser.username || !newUser.password) return;
     if (editingUser) {
@@ -137,7 +147,9 @@ const AdminDashboard: React.FC = () => {
           </div>
           <p className="text-slate-500 text-xs font-bold uppercase tracking-[0.4em] italic">{config.name}</p>
         </div>
-        <div className="flex gap-3 relative z-10">
+        <div className="flex gap-3 relative z-10 flex-wrap justify-center">
+          <button onClick={() => setShowTeamModal(true)} className="bg-slate-100 hover:bg-slate-200 text-pramukh-navy px-6 py-3 rounded-xl font-black shadow-md transition-all uppercase text-xs tracking-widest italic border-2 border-slate-200">Add Team</button>
+          <button onClick={() => setShowPlayerModal(true)} className="bg-slate-100 hover:bg-slate-200 text-pramukh-navy px-6 py-3 rounded-xl font-black shadow-md transition-all uppercase text-xs tracking-widest italic border-2 border-slate-200">Add Player</button>
           <button onClick={() => setShowUserModal(true)} className="bg-pramukh-navy hover:brightness-125 text-white px-6 py-3 rounded-xl font-black shadow-lg transition-all uppercase text-xs tracking-widest italic border-2 border-white/10">Add Staff</button>
           <button onClick={() => setShowMatchModal(true)} className="bg-pramukh-red hover:brightness-110 text-white px-6 py-3 rounded-xl font-black shadow-lg transition-all uppercase text-xs tracking-widest italic border-2 border-white/10">New Match</button>
         </div>
@@ -163,7 +175,7 @@ const AdminDashboard: React.FC = () => {
                     <tr className="bg-slate-50 text-slate-400 text-[10px] uppercase font-black tracking-[0.3em]"><th className="px-8 py-5">Matchup</th><th className="px-8 py-5">Schedule</th><th className="px-8 py-5">Venue</th><th className="px-8 py-5">Status</th><th className="px-8 py-5 text-right">Action</th></tr>
                   </thead>
                   <tbody className="divide-y divide-slate-50">
-                    {matches.map(m => (
+                    {matches.length === 0 ? <tr><td colSpan={5} className="p-20 text-center text-slate-300 font-black italic">No matches found</td></tr> : matches.map(m => (
                       <tr key={m.id} className="hover:bg-slate-50/50 transition-colors">
                         <td className="px-8 py-6">
                            <div className="flex items-center space-x-3">
@@ -178,6 +190,32 @@ const AdminDashboard: React.FC = () => {
                     ))}
                   </tbody>
                 </table>
+              </div>
+            )}
+
+            {activeTab === 'teams' && (
+              <div className="p-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {teams.length === 0 ? <div className="col-span-full p-20 text-center text-slate-300 font-black italic">No teams registered</div> : teams.map(t => (
+                  <div key={t.id} className="bg-slate-50 p-6 rounded-[2rem] border-2 border-slate-100 flex items-center space-x-4 shadow-sm hover:border-pramukh-navy transition-all">
+                    <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center font-black text-pramukh-navy border border-slate-100 shadow-inner overflow-hidden uppercase italic">
+                      {t.logoUrl ? <img src={t.logoUrl} className="w-full h-full object-cover" /> : t.shortName}
+                    </div>
+                    <div>
+                      <div className="font-black text-slate-800 uppercase italic leading-none">{t.name}</div>
+                      <div className="text-[10px] text-slate-400 font-black tracking-widest mt-1 uppercase italic">{t.shortName}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {activeTab === 'players' && (
+              <div className="p-8 grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                {players.length === 0 ? <div className="col-span-full p-20 text-center text-slate-300 font-black italic">No players registered</div> : players.map(p => (
+                  <div key={p.id} className="bg-slate-50 p-4 rounded-2xl border-2 border-slate-100 text-center hover:border-pramukh-red transition-all group">
+                    <div className="text-sm font-black text-slate-700 uppercase italic group-hover:text-pramukh-navy">{p.name}</div>
+                  </div>
+                ))}
               </div>
             )}
 
@@ -208,12 +246,12 @@ const AdminDashboard: React.FC = () => {
                     <div className="bg-white p-10 rounded-[2.5rem] border-2 border-slate-100 shadow-sm">
                        <h4 className="text-lg font-black text-pramukh-navy uppercase italic mb-6">Setup in 3 Minutes</h4>
                        <ol className="space-y-4 text-sm font-bold text-slate-500 list-decimal pl-6">
-                          <li>Login to MongoDB Atlas and find your cluster `nktsar9`.</li>
-                          <li>Click the App Services tab at the top of the Atlas page.</li>
-                          <li>Click Create App (choose "Build from Scratch").</li>
-                          <li>Copy the App ID (found at the top left of the dashboard).</li>
+                          <li>{"Login to MongoDB Atlas and find your cluster nktsar9."}</li>
+                          <li>{"Click the App Services tab at the top of the Atlas page."}</li>
+                          <li>{"Click Create App (choose 'Build from Scratch')."}</li>
+                          <li>{"Copy the App ID (found at the top left of the dashboard)."}</li>
                           <li>{"In your App Service: Go to Authentication > Enable Allow Anonymous Login."}</li>
-                          <li>{"In your App Service: Go to Data Access > Rules > Link your nktsar9 cluster and enable Read/Write."}</li>
+                          <li>{"In your App Service: Go to Data Access > Rules > Link your cluster and enable Read/Write."}</li>
                        </ol>
                     </div>
                     <div className="bg-pramukh-navy p-10 rounded-[2.5rem] shadow-xl text-white">
@@ -297,6 +335,38 @@ const AdminDashboard: React.FC = () => {
           </>
         )}
       </div>
+
+      {showTeamModal && (
+        <div className="fixed inset-0 bg-pramukh-navy/95 backdrop-blur-xl flex items-center justify-center p-6 z-[100]">
+          <div className="bg-white rounded-[3rem] w-full max-w-md p-12 shadow-2xl border-b-[16px] border-pramukh-red">
+            <h2 className="text-3xl font-black text-pramukh-navy uppercase italic mb-8 text-center">REGISTER TEAM</h2>
+            <div className="space-y-5">
+              <input type="text" className="w-full px-6 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-black uppercase italic" placeholder="Team Name" value={newTeam.name} onChange={e => setNewTeam({...newTeam, name: e.target.value})} />
+              <input type="text" className="w-full px-6 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-black uppercase italic" placeholder="Short Name (3-4 Letters)" value={newTeam.shortName} onChange={e => setNewTeam({...newTeam, shortName: e.target.value})} />
+              <input type="text" className="w-full px-6 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-black italic" placeholder="Logo URL (Optional)" value={newTeam.logoUrl} onChange={e => setNewTeam({...newTeam, logoUrl: e.target.value})} />
+              <div className="flex gap-4 pt-4">
+                <button onClick={handleCreateTeam} className="flex-1 bg-pramukh-navy text-white font-black py-4 rounded-xl uppercase italic shadow-lg">Save Team</button>
+                <button onClick={() => setShowTeamModal(false)} className="flex-1 bg-slate-100 text-slate-400 font-black py-4 rounded-xl uppercase italic">Cancel</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showPlayerModal && (
+        <div className="fixed inset-0 bg-pramukh-navy/95 backdrop-blur-xl flex items-center justify-center p-6 z-[100]">
+          <div className="bg-white rounded-[3rem] w-full max-w-md p-12 shadow-2xl border-b-[16px] border-pramukh-red">
+            <h2 className="text-3xl font-black text-pramukh-navy uppercase italic mb-8 text-center">REGISTER PLAYER</h2>
+            <div className="space-y-5">
+              <input type="text" className="w-full px-6 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-black uppercase italic" placeholder="Player Full Name" value={newPlayer.name} onChange={e => setNewPlayer({...newPlayer, name: e.target.value})} />
+              <div className="flex gap-4 pt-4">
+                <button onClick={handleCreatePlayer} className="flex-1 bg-pramukh-navy text-white font-black py-4 rounded-xl uppercase italic shadow-lg">Save Player</button>
+                <button onClick={() => setShowPlayerModal(false)} className="flex-1 bg-slate-100 text-slate-400 font-black py-4 rounded-xl uppercase italic">Cancel</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showUserModal && (
         <div className="fixed inset-0 bg-pramukh-navy/95 backdrop-blur-xl flex items-center justify-center p-6 z-[100]">

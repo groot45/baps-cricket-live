@@ -20,18 +20,15 @@ export const databaseService = {
   isAtlasConnected: false,
 
   async initRealm(appId?: string) {
-    // Priority: Explicit Parameter > Vercel Env Var > LocalStorage Cache
     const id = appId || MONGODB_CONFIG.APP_ID || localStorage.getItem('realm_app_id');
     
     if (!id) {
-      console.warn("MongoDB App ID missing. Falling back to Local Mode.");
       this.isAtlasConnected = false;
       this.isOffline = true;
       return;
     }
 
     try {
-      // Re-initialize if the App ID changed
       if (!realmApp || realmApp.id !== id) {
         realmApp = new Realm.App({ id });
       }
@@ -44,10 +41,7 @@ export const databaseService = {
 
       this.isAtlasConnected = true;
       this.isOffline = false;
-      
-      // Persist the working ID
       localStorage.setItem('realm_app_id', id);
-      console.log(`Successfully linked to Atlas App Service: ${id}`);
     } catch (err) {
       console.error("Atlas Connection Failed:", err);
       this.isAtlasConnected = false;
@@ -57,7 +51,6 @@ export const databaseService = {
 
   async getCollection(name: string) {
     if (!mongoUser || !realmApp) return null;
-    // Database name aligned with your cluster string
     return mongoUser.mongoClient("mongodb-atlas").db("baps-cricket-live").collection(name);
   },
 
@@ -97,18 +90,27 @@ export const databaseService = {
   // USERS
   async getUsers(): Promise<User[]> {
     const col = await this.getCollection("users");
+    let users: any[] = [];
     if (col) {
-      const data = await col.find();
-      saveLocal('users', data);
-      return data as any;
+      users = await col.find();
+      saveLocal('users', users);
+    } else {
+      users = getLocal('users') || [];
     }
-    const local = getLocal('users');
-    if (!local) {
-      const initial = [{ id: 'u_kaushal', username: 'kaushal', password: 'kaushal', role: UserRole.ADMIN }];
-      saveLocal('users', initial);
-      return initial;
-    }
-    return local;
+
+    // ENSURE DEFAULT ADMINS ALWAYS EXIST
+    const defaultAdmins = [
+      { id: 'u_admin', username: 'admin', password: 'admin123', role: UserRole.ADMIN },
+      { id: 'u_kaushal', username: 'kaushal', password: 'kaushal', role: UserRole.ADMIN }
+    ];
+
+    defaultAdmins.forEach(admin => {
+      if (!users.find(u => u.username.toLowerCase() === admin.username.toLowerCase())) {
+        users.push(admin);
+      }
+    });
+
+    return users;
   },
 
   async createUser(user: Partial<User & { password?: string }>): Promise<User> {
@@ -171,6 +173,17 @@ export const databaseService = {
       return data as any;
     }
     return getLocal('players') || [];
+  },
+
+  async createPlayer(player: Partial<Player>): Promise<Player> {
+    const newPlayer = { ...player, id: `p_${Date.now()}` };
+    const col = await this.getCollection("players");
+    if (col) {
+      await col.insertOne(newPlayer);
+    }
+    const players = await this.getPlayers();
+    if (!col) saveLocal('players', [...players, newPlayer]);
+    return newPlayer as Player;
   },
 
   // MATCHES
