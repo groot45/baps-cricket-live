@@ -24,23 +24,45 @@ export const TournamentProvider: React.FC<{ children: ReactNode }> = ({ children
   });
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const fetchConfig = async () => {
+  const fetchConfig = async () => {
+    try {
       const data = await databaseService.getTournamentConfig();
-      // Ensure we have the new fields even if loading from older local storage
-      setConfig({
-        ...data,
-        bapsFullLogo: data.bapsFullLogo || "",
-        bapsSymbol: data.bapsSymbol || ""
-      });
+      if (data) {
+        setConfig({
+          ...data,
+          bapsFullLogo: data.bapsFullLogo || "",
+          bapsSymbol: data.bapsSymbol || ""
+        });
+      }
+    } catch (e) {
+      console.error("TournamentContext: Fetch Error", e);
+    } finally {
       setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    // 1. Initialize DB Connection first thing
+    const initAndFetch = async () => {
+      await databaseService.initRealm();
+      await fetchConfig();
     };
-    fetchConfig();
+
+    initAndFetch();
+
+    // 2. Poll for branding updates every 30 seconds
+    // This ensures that when an admin changes a logo, all live screens (including non-logged-in users)
+    // will see the update without a manual refresh.
+    const interval = setInterval(fetchConfig, 30000);
+    
+    return () => clearInterval(interval);
   }, []);
 
   const updateConfig = async (newConfig: TournamentConfig) => {
     const updated = await databaseService.updateTournamentConfig(newConfig);
-    setConfig(updated);
+    if (updated) {
+      setConfig(updated);
+    }
   };
 
   return (

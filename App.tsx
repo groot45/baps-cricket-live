@@ -33,9 +33,6 @@ const SiteGatekeeper: React.FC<{ children: React.ReactNode }> = ({ children }) =
   const SITE_ACCESS_KEY = "PRAMUKH2026";
 
   useEffect(() => {
-    // Attempt DB init on site open
-    databaseService.initRealm();
-    
     const sessionAccess = sessionStorage.getItem('site_access_granted');
     if (sessionAccess === 'true') {
       setAccessGranted(true);
