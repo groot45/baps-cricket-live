@@ -208,10 +208,10 @@ const AdminDashboard: React.FC = () => {
                     <div className="bg-white p-10 rounded-[2.5rem] border-2 border-slate-100 shadow-sm">
                        <h4 className="text-lg font-black text-pramukh-navy uppercase italic mb-6">Setup in 3 Minutes</h4>
                        <ol className="space-y-4 text-sm font-bold text-slate-500 list-decimal pl-6">
-                          <li>Login to **MongoDB Atlas** and find your cluster `nktsar9`.</li>
-                          <li>Click the **App Services** tab at the top of the Atlas page.</li>
-                          <li>Click **Create App** (choose "Build from Scratch").</li>
-                          <li>Copy the **App ID** (found at the top left of the dashboard).</li>
+                          <li>Login to MongoDB Atlas and find your cluster `nktsar9`.</li>
+                          <li>Click the App Services tab at the top of the Atlas page.</li>
+                          <li>Click Create App (choose "Build from Scratch").</li>
+                          <li>Copy the App ID (found at the top left of the dashboard).</li>
                           <li>{"In your App Service: Go to Authentication > Enable Allow Anonymous Login."}</li>
                           <li>{"In your App Service: Go to Data Access > Rules > Link your nktsar9 cluster and enable Read/Write."}</li>
                        </ol>
