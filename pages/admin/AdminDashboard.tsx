@@ -69,7 +69,6 @@ const AdminDashboard: React.FC = () => {
     }
     setLoading(true);
     await databaseService.initRealm(mongoAppId);
-    // After re-init, force refresh all data to confirm connection
     await fetchData();
     setLoading(false);
     if (databaseService.isAtlasConnected) {
@@ -213,13 +212,15 @@ const AdminDashboard: React.FC = () => {
                           <li>Click the **App Services** tab at the top of the Atlas page.</li>
                           <li>Click **Create App** (choose "Build from Scratch").</li>
                           <li>Copy the **App ID** (found at the top left of the dashboard).</li>
-                          <li>In your App Service: Go to **Authentication** &gt; Enable **Allow Anonymous Login**.</li>
-                          <li>In your App Service: Go to **Data Access &gt; Rules** &gt; Link your `nktsar9` cluster and enable Read/Write for a collection named `baps-cricket-live`.</li>
+                          <li>{"In your App Service: Go to Authentication > Enable Allow Anonymous Login."}</li>
+                          <li>{"In your App Service: Go to Data Access > Rules > Link your nktsar9 cluster and enable Read/Write."}</li>
                        </ol>
                     </div>
                     <div className="bg-pramukh-navy p-10 rounded-[2.5rem] shadow-xl text-white">
                        <h4 className="text-lg font-black uppercase italic mb-6">Vercel Deployment Sync</h4>
-                       <p className="text-sm opacity-80 mb-4 italic leading-relaxed">To make this permanent for all users on Vercel, go to your **Vercel Project Settings &gt; Environment Variables** and add:</p>
+                       <p className="text-sm opacity-80 mb-4 italic leading-relaxed">
+                         {"To make this permanent for all users on Vercel, go to your Vercel Project Settings > Environment Variables and add:"}
+                       </p>
                        <div className="bg-white/10 p-5 rounded-xl font-mono text-xs mb-6 flex justify-between items-center group cursor-pointer border border-white/20" onClick={() => {
                           navigator.clipboard.writeText(`VITE_MONGODB_APP_ID=${mongoAppId || 'your-app-id'}`);
                           alert("Variable copied! Paste this in Vercel.");
