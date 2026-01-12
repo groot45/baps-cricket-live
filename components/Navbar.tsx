@@ -1,8 +1,9 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useTournament } from '../context/TournamentContext';
+import { databaseService } from '../services/api';
 
 const Navbar: React.FC = () => {
   const { user, logout, isAdmin, isScorer } = useAuth();
@@ -10,6 +11,14 @@ const Navbar: React.FC = () => {
   const navigate = useNavigate();
   const [logoErr, setLogoErr] = useState(false);
   const [bapsErr, setBapsErr] = useState(false);
+  const [dbActive, setDbActive] = useState(false);
+
+  useEffect(() => {
+    const checkDb = () => setDbActive(databaseService.isAtlasConnected);
+    checkDb();
+    const interval = setInterval(checkDb, 5000);
+    return () => clearInterval(interval);
+  }, []);
 
   const handleLogout = () => {
     logout();
@@ -28,7 +37,6 @@ const Navbar: React.FC = () => {
       );
     }
     
-    // Default BAPS Symbol Fallback if tournament logo is missing or broken
     if (config.bapsSymbol && !bapsErr) {
         return <img src={config.bapsSymbol} className="w-full h-full object-contain" alt="BAPS" onError={() => setBapsErr(true)} />;
     }
@@ -54,7 +62,10 @@ const Navbar: React.FC = () => {
                        <span className="text-[9px] font-black text-white bg-pramukh-red px-1.5 py-0.5 rounded leading-none">BAPS CHARITIES</span>
                    )}
                 </div>
-                <span className="text-2xl font-black tracking-tight italic uppercase">{config.shortName}</span>
+                <div className="flex items-center">
+                  <span className="text-2xl font-black tracking-tight italic uppercase">{config.shortName}</span>
+                  <div className={`ml-3 w-2 h-2 rounded-full animate-pulse ${dbActive ? 'bg-green-400' : 'bg-amber-400'}`} title={dbActive ? 'Connected to Atlas' : 'Local Mode Only'}></div>
+                </div>
                 <span className="text-[11px] font-bold tracking-[0.3em] text-pramukh-red uppercase ml-0.5">{config.location} {config.year}</span>
               </div>
             </Link>

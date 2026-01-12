@@ -20,21 +20,36 @@ export const databaseService = {
   isAtlasConnected: false,
 
   async initRealm(appId?: string) {
+    // Priority: Explicit Parameter > Vercel Env Var > LocalStorage Cache
     const id = appId || MONGODB_CONFIG.APP_ID || localStorage.getItem('realm_app_id');
+    
     if (!id) {
-      console.warn("No MongoDB App ID found. Running in Local Mode.");
+      console.warn("MongoDB App ID missing. Falling back to Local Mode.");
+      this.isAtlasConnected = false;
+      this.isOffline = true;
       return;
     }
 
     try {
-      realmApp = new Realm.App({ id });
-      mongoUser = await realmApp.logIn(Realm.Credentials.anonymous());
+      // Re-initialize if the App ID changed
+      if (!realmApp || realmApp.id !== id) {
+        realmApp = new Realm.App({ id });
+      }
+      
+      if (!realmApp.currentUser) {
+        mongoUser = await realmApp.logIn(Realm.Credentials.anonymous());
+      } else {
+        mongoUser = realmApp.currentUser;
+      }
+
       this.isAtlasConnected = true;
       this.isOffline = false;
-      if (appId) localStorage.setItem('realm_app_id', appId);
-      console.log(`MongoDB Atlas Connected: ${id}`);
+      
+      // Persist the working ID
+      localStorage.setItem('realm_app_id', id);
+      console.log(`Successfully linked to Atlas App Service: ${id}`);
     } catch (err) {
-      console.error("MongoDB Atlas Connection Failed:", err);
+      console.error("Atlas Connection Failed:", err);
       this.isAtlasConnected = false;
       this.isOffline = true;
     }
@@ -42,7 +57,7 @@ export const databaseService = {
 
   async getCollection(name: string) {
     if (!mongoUser || !realmApp) return null;
-    // Database name from your connection string
+    // Database name aligned with your cluster string
     return mongoUser.mongoClient("mongodb-atlas").db("baps-cricket-live").collection(name);
   },
 
@@ -89,7 +104,6 @@ export const databaseService = {
     }
     const local = getLocal('users');
     if (!local) {
-      // Master credentials: kaushal / kaushal
       const initial = [{ id: 'u_kaushal', username: 'kaushal', password: 'kaushal', role: UserRole.ADMIN }];
       saveLocal('users', initial);
       return initial;
