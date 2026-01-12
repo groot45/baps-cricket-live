@@ -16,14 +16,14 @@ const saveLocal = (key: string, data: any) => {
 
 export const databaseService = {
   isOffline: true,
-  isAtlasConnected: false, // Keeping variable name for compatibility if needed elsewhere
+  isAtlasConnected: false, // Legacy variable name kept for component compatibility
   lastError: "",
 
   async initRealm(config?: { url: string; key: string }) {
     const url = config?.url || SUPABASE_CONFIG.URL || localStorage.getItem('sb_url');
     const key = config?.key || SUPABASE_CONFIG.ANON_KEY || localStorage.getItem('sb_key');
     
-    if (!url || !key) {
+    if (!url || !key || url === "" || key === "") {
       console.log("Database: Running in Local Only mode.");
       this.isAtlasConnected = false;
       this.isOffline = true;
@@ -32,10 +32,18 @@ export const databaseService = {
 
     try {
       supabase = createClient(url, key);
-      // Simple ping to check connection
+      
+      // Test connection by trying to fetch from 'matches'
       const { error } = await supabase.from('matches').select('id').limit(1);
       
-      if (error && error.code !== 'PGRST116') { // PGRST116 means table doesn't exist yet, which is fine
+      if (error) {
+        // Table doesn't exist (PGRST116 or 42P01)
+        if (error.code === 'PGRST116' || error.message.includes('not find the table') || error.code === '42P01') {
+          this.lastError = "CONNECTED BUT SETUP INCOMPLETE: Your Supabase URL is correct, but the tables (matches, teams, etc.) haven't been created yet. Copy the SQL script from the Database tab and run it in your Supabase SQL Editor.";
+          this.isAtlasConnected = false;
+          this.isOffline = true;
+          return;
+        }
         throw error;
       }
 
@@ -46,14 +54,13 @@ export const databaseService = {
       localStorage.setItem('sb_key', key);
       console.log("Database: Supabase Live Sync Connected.");
     } catch (err: any) {
-      this.lastError = `Connection Failed: ${err.message}. Running in local mode.`;
+      this.lastError = `CONNECTION FAILED: ${err.message}. Ensure your URL/Key are correct and you've allowed public access.`;
       console.error("Supabase Connection Error:", err);
       this.isAtlasConnected = false;
       this.isOffline = true;
     }
   },
 
-  // Helper to merge local and remote data
   async syncData<T>(tableName: string, localData: T[]): Promise<T[]> {
     if (!supabase || this.isOffline) return localData;
     try {
@@ -84,25 +91,28 @@ export const databaseService = {
     };
 
     if (supabase && !this.isOffline) {
-      const { data } = await supabase.from('config').select('*').eq('id', TOURNAMENT.id).single();
-      if (data) {
-        saveLocal('config', data);
-        return data;
-      }
+      try {
+        const { data } = await supabase.from('config').select('*').eq('id', TOURNAMENT.id).single();
+        if (data) {
+          saveLocal('config', data);
+          return data;
+        }
+      } catch (e) {}
     }
     return local || defaultConfig;
   },
 
   async updateTournamentConfig(config: TournamentConfig): Promise<TournamentConfig> {
     if (supabase && !this.isOffline) {
-      await supabase.from('config').upsert(config);
+      try {
+        await supabase.from('config').upsert(config);
+      } catch (e) {}
     }
     saveLocal('config', config);
     return config;
   },
 
   async getUsers(): Promise<User[]> {
-    // Fixed: Explicitly type local to avoid "Untyped function calls may not accept type arguments" on this.syncData call
     const local: User[] = getLocal('users') || [];
     const remote = await this.syncData('users', local);
     
@@ -124,7 +134,7 @@ export const databaseService = {
   async createUser(user: Partial<User & { password?: string }>): Promise<User> {
     const newUser = { ...user, id: `u_${Date.now()}` };
     if (supabase && !this.isOffline) {
-      await supabase.from('users').insert(newUser);
+      try { await supabase.from('users').insert(newUser); } catch (e) {}
     }
     const users = getLocal('users') || [];
     saveLocal('users', [...users, newUser]);
@@ -133,7 +143,7 @@ export const databaseService = {
 
   async updateUser(id: string, user: Partial<User & { password?: string }>): Promise<User | null> {
     if (supabase && !this.isOffline) {
-      await supabase.from('users').update(user).eq('id', id);
+      try { await supabase.from('users').update(user).eq('id', id); } catch (e) {}
     }
     const users = getLocal('users') || [];
     const index = users.findIndex((u: any) => u.id === id);
@@ -146,7 +156,6 @@ export const databaseService = {
   },
 
   async getTeams(): Promise<Team[]> {
-    // Fixed: Explicitly type local to avoid "Untyped function calls may not accept type arguments" on this.syncData call
     const local: Team[] = getLocal('teams') || [];
     return this.syncData('teams', local);
   },
@@ -154,7 +163,7 @@ export const databaseService = {
   async createTeam(team: Partial<Team>): Promise<Team> {
     const newTeam = { ...team, id: `t_${Date.now()}` };
     if (supabase && !this.isOffline) {
-      await supabase.from('teams').insert(newTeam);
+      try { await supabase.from('teams').insert(newTeam); } catch (e) {}
     }
     const teams = getLocal('teams') || [];
     saveLocal('teams', [...teams, newTeam]);
@@ -162,7 +171,6 @@ export const databaseService = {
   },
 
   async getPlayers(): Promise<Player[]> {
-    // Fixed: Explicitly type local to avoid "Untyped function calls may not accept type arguments" on this.syncData call
     const local: Player[] = getLocal('players') || [];
     return this.syncData('players', local);
   },
@@ -170,7 +178,7 @@ export const databaseService = {
   async createPlayer(player: Partial<Player>): Promise<Player> {
     const newPlayer = { ...player, id: `p_${Date.now()}` };
     if (supabase && !this.isOffline) {
-      await supabase.from('players').insert(newPlayer);
+      try { await supabase.from('players').insert(newPlayer); } catch (e) {}
     }
     const players = getLocal('players') || [];
     saveLocal('players', [...players, newPlayer]);
@@ -178,7 +186,6 @@ export const databaseService = {
   },
 
   async getMatches(): Promise<Match[]> {
-    // Fixed: Explicitly type local to avoid "Untyped function calls may not accept type arguments" on this.syncData call
     const local: Match[] = getLocal('matches') || [];
     return this.syncData('matches', local);
   },
@@ -192,7 +199,7 @@ export const databaseService = {
       innings: [{ runs: 0, wickets: 0, overs: 0, balls: 0, battingTeamId: match.teamA.id, bowlingTeamId: match.teamB.id, oversHistory: [] }]
     };
     if (supabase && !this.isOffline) {
-      await supabase.from('matches').insert(newMatch);
+      try { await supabase.from('matches').insert(newMatch); } catch (e) {}
     }
     const matches = getLocal('matches') || [];
     saveLocal('matches', [...matches, newMatch]);
@@ -221,7 +228,7 @@ export const databaseService = {
     }
 
     if (supabase && !this.isOffline) {
-      await supabase.from('matches').update({ innings: match.innings }).eq('id', matchId);
+      try { await supabase.from('matches').update({ innings: match.innings }).eq('id', matchId); } catch (e) {}
     }
     
     matches[matchIndex] = match;

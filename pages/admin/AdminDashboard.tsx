@@ -31,6 +31,58 @@ const AdminDashboard: React.FC = () => {
   const [newMatch, setNewMatch] = useState({ teamAId: '', teamBId: '', venue: 'Arena 1', date: '' });
   const [newUser, setNewUser] = useState({ username: '', password: '', role: UserRole.SCORER });
 
+  const SQL_SCRIPT = `-- SQL FOR SUPABASE EDITOR
+-- Paste this into the SQL Editor and click 'Run'
+
+CREATE TABLE IF NOT EXISTS config (
+  id TEXT PRIMARY KEY,
+  name TEXT,
+  "shortName" TEXT,
+  year INTEGER,
+  location TEXT,
+  "logoUrl" TEXT,
+  "bapsFullLogo" TEXT,
+  "bapsSymbol" TEXT
+);
+
+CREATE TABLE IF NOT EXISTS users (
+  id TEXT PRIMARY KEY,
+  username TEXT UNIQUE,
+  password TEXT,
+  role TEXT
+);
+
+CREATE TABLE IF NOT EXISTS teams (
+  id TEXT PRIMARY KEY,
+  name TEXT,
+  "shortName" TEXT,
+  "logoUrl" TEXT
+);
+
+CREATE TABLE IF NOT EXISTS players (
+  id TEXT PRIMARY KEY,
+  name TEXT
+);
+
+CREATE TABLE IF NOT EXISTS matches (
+  id TEXT PRIMARY KEY,
+  "tournamentId" TEXT,
+  "teamA" JSONB,
+  "teamB" JSONB,
+  status TEXT,
+  "currentInnings" INTEGER,
+  innings JSONB,
+  "startTime" TEXT,
+  venue TEXT
+);
+
+-- DISABLE ROW LEVEL SECURITY (Makes tables public for this tournament app)
+ALTER TABLE config DISABLE ROW LEVEL SECURITY;
+ALTER TABLE users DISABLE ROW LEVEL SECURITY;
+ALTER TABLE teams DISABLE ROW LEVEL SECURITY;
+ALTER TABLE players DISABLE ROW LEVEL SECURITY;
+ALTER TABLE matches DISABLE ROW LEVEL SECURITY;`;
+
   const fetchData = async () => {
     setLoading(true);
     try {
@@ -78,9 +130,9 @@ const AdminDashboard: React.FC = () => {
     setLoading(false);
     
     if (!databaseService.isOffline) {
-        alert("SUCCESS! Connected to Supabase. Your data will now sync live.");
+        alert("SUCCESS! Connected to Supabase.");
     } else {
-        alert("CONNECTION FAILED. Double check your URL and Key.");
+        alert("SETUP ERROR: " + databaseService.lastError);
     }
   };
 
@@ -230,61 +282,69 @@ const AdminDashboard: React.FC = () => {
                     <div className="bg-white w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6 shadow-xl text-pramukh-navy border-4 border-slate-50">
                        <i className={`fas fa-cloud-bolt text-3xl ${dbStatus.connected ? 'text-green-500' : 'text-slate-300'}`}></i>
                     </div>
-                    <h3 className="text-3xl font-black text-pramukh-navy uppercase italic mb-2 tracking-tighter">SUPABASE LIVE SYNC</h3>
+                    <h3 className="text-3xl font-black text-pramukh-navy uppercase italic mb-2 tracking-tighter">SUPABASE SETUP</h3>
                     <p className="text-slate-400 text-xs font-bold uppercase tracking-[0.3em] mb-10 max-w-xl mx-auto">
-                      {"The app works in Local Mode by default. To sync scores live, enter your Supabase details below."}
+                      {"Follow these 2 steps to link your live database."}
                     </p>
                     
-                    <div className="max-w-md mx-auto space-y-4">
-                       <input 
-                         type="text" 
-                         className="w-full px-8 py-5 bg-white border-2 border-slate-100 rounded-2xl font-black text-center text-sm tracking-widest focus:border-pramukh-navy outline-none shadow-inner" 
-                         placeholder="Supabase Project URL" 
-                         value={sbUrl}
-                         onChange={(e) => setSbUrl(e.target.value)}
-                       />
-                       <input 
-                         type="password" 
-                         className="w-full px-8 py-5 bg-white border-2 border-slate-100 rounded-2xl font-black text-center text-sm tracking-widest focus:border-pramukh-navy outline-none shadow-inner" 
-                         placeholder="Supabase Anon Key" 
-                         value={sbKey}
-                         onChange={(e) => setSbKey(e.target.value)}
-                       />
-                       <button onClick={handleConnectSupabase} className="w-full bg-pramukh-navy text-white font-black py-5 rounded-2xl uppercase italic tracking-widest shadow-xl hover:brightness-125 transition-all">
-                         Enable Live Sync
-                       </button>
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 text-left">
+                       {/* STEP 1 */}
+                       <div className="space-y-6">
+                          <div className="flex items-center space-x-4 mb-4">
+                             <span className="w-10 h-10 rounded-full bg-pramukh-navy text-white flex items-center justify-center font-black italic">1</span>
+                             <h4 className="text-lg font-black uppercase italic text-pramukh-navy">API Credentials</h4>
+                          </div>
+                          <div className="space-y-4 bg-white p-8 rounded-3xl border-2 border-slate-100">
+                             <input 
+                               type="text" 
+                               className="w-full px-6 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-black text-sm tracking-widest focus:border-pramukh-navy outline-none" 
+                               placeholder="Supabase Project URL" 
+                               value={sbUrl}
+                               onChange={(e) => setSbUrl(e.target.value)}
+                             />
+                             <input 
+                               type="password" 
+                               className="w-full px-6 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-black text-sm tracking-widest focus:border-pramukh-navy outline-none" 
+                               placeholder="Supabase Anon Key" 
+                               value={sbKey}
+                               onChange={(e) => setSbKey(e.target.value)}
+                             />
+                             <button onClick={handleConnectSupabase} className="w-full bg-pramukh-navy text-white font-black py-4 rounded-xl uppercase italic tracking-widest shadow-xl hover:brightness-125 transition-all">
+                               Save & Test
+                             </button>
+                          </div>
+                       </div>
+
+                       {/* STEP 2 */}
+                       <div className="space-y-6">
+                          <div className="flex items-center space-x-4 mb-4">
+                             <span className="w-10 h-10 rounded-full bg-pramukh-red text-white flex items-center justify-center font-black italic">2</span>
+                             <h4 className="text-lg font-black uppercase italic text-pramukh-navy">SQL Initialization</h4>
+                          </div>
+                          <div className="bg-pramukh-navy p-8 rounded-3xl text-white relative group">
+                             <p className="text-[10px] font-black uppercase tracking-widest opacity-60 mb-4">Copy this script into your Supabase SQL Editor:</p>
+                             <pre className="text-[9px] font-mono bg-black/30 p-4 rounded-xl overflow-x-auto max-h-32 no-scrollbar border border-white/10 mb-4">
+                                {SQL_SCRIPT}
+                             </pre>
+                             <button onClick={() => {
+                                navigator.clipboard.writeText(SQL_SCRIPT);
+                                alert("SQL Script Copied! Paste it into Supabase SQL Editor.");
+                             }} className="w-full bg-white text-pramukh-navy font-black py-4 rounded-xl uppercase italic tracking-widest hover:bg-slate-100 transition-all flex items-center justify-center">
+                                <i className="fas fa-copy mr-2"></i> Copy SQL Script
+                             </button>
+                          </div>
+                       </div>
                     </div>
 
                     {dbStatus.error && (
-                        <div className="mt-8 bg-red-50 text-red-600 p-6 rounded-2xl border-2 border-red-100 text-xs font-black uppercase tracking-widest max-w-2xl mx-auto text-left leading-relaxed">
-                            <i className="fas fa-triangle-exclamation mr-3 text-lg"></i>
-                            {dbStatus.error}
+                        <div className="mt-12 bg-red-50 text-red-600 p-8 rounded-[2rem] border-2 border-red-100 text-xs font-black uppercase tracking-widest max-w-4xl mx-auto text-left leading-relaxed">
+                            <i className="fas fa-triangle-exclamation mr-4 text-2xl float-left"></i>
+                            <div className="overflow-hidden">
+                               <p className="text-lg mb-2">CRITICAL SETUP ERROR</p>
+                               {dbStatus.error}
+                            </div>
                         </div>
                     )}
-                 </div>
-
-                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                    <div className="bg-white p-10 rounded-[2.5rem] border-2 border-slate-100 shadow-sm">
-                       <h4 className="text-lg font-black text-pramukh-navy uppercase italic mb-6">Simple 2-Minute Setup</h4>
-                       <ol className="space-y-4 text-sm font-bold text-slate-500 list-decimal pl-6">
-                          <li>{"Sign up at Supabase.com."}</li>
-                          <li>{"Create a new 'BAPS Live' project."}</li>
-                          <li>{"Go to Project Settings > API."}</li>
-                          <li>{"Copy the 'Project URL' and 'Anon Key' and paste them here."}</li>
-                          <li>{"Tables will be managed automatically by the app."}</li>
-                       </ol>
-                    </div>
-                    <div className="bg-pramukh-navy p-10 rounded-[2.5rem] shadow-xl text-white">
-                       <h4 className="text-lg font-black uppercase italic mb-6">Why switch?</h4>
-                       <p className="text-sm opacity-80 mb-4 italic leading-relaxed">
-                         {"Supabase is much easier to set up for frontend projects. You don't have to deal with MongoDB Realm's complex security rules and schemas. It just works!"}
-                       </p>
-                       <div className="mt-4 p-4 bg-white/10 rounded-xl border border-white/20">
-                          <p className="text-[10px] font-black uppercase tracking-widest opacity-60">Status</p>
-                          <p className="font-black italic text-green-400">LOCAL MODE ACTIVE</p>
-                          <p className="text-[10px] opacity-40 mt-1 uppercase">Everything you do is saved in this browser now.</p>
-                       </div>
-                    </div>
                  </div>
               </div>
             )}
