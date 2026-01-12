@@ -53,12 +53,11 @@ export const databaseService = {
     try {
       const { data } = await supabase.from('players').select('*');
       if (data) { 
-        // Merge logic: ensure local temporary players (p_...) are preserved until they exist in remote
+        // Sync local to remote: keep any local players that haven't hit the server yet
+        const remoteIds = new Set(data.map((p: any) => p.id));
         const merged = [...(data as Player[])];
         local.forEach(lp => {
-          if (lp.id.startsWith('p_') && !merged.find(rp => rp.id === lp.id)) {
-            merged.push(lp);
-          }
+          if (!remoteIds.has(lp.id)) merged.push(lp);
         });
         saveLocal('players', merged); 
         return merged; 
@@ -68,26 +67,17 @@ export const databaseService = {
   },
 
   async createPlayer(player: Partial<Player>): Promise<Player> {
-    const newPlayer = { 
-      ...player, 
-      id: `p_${Date.now()}` 
-    };
+    const newPlayer = { ...player, id: `p_${Date.now()}` } as Player;
     
-    // 1. Save to Local First (Optimistic)
+    // Optimistic Save
     const players = getLocal('players') || [];
     saveLocal('players', [...players, newPlayer]);
     
-    // 2. Sync to Supabase if available
     if (supabase && !this.isOffline) {
-      try {
-        const { error } = await supabase.from('players').insert(newPlayer);
-        if (error) console.error("Supabase Player Error:", error);
-      } catch (err) {
-        console.error("Supabase Save Exception:", err);
-      }
+      const { error } = await supabase.from('players').insert(newPlayer);
+      if (error) throw error;
     }
-    
-    return newPlayer as Player;
+    return newPlayer;
   },
 
   async getTeams(): Promise<Team[]> {
@@ -101,11 +91,14 @@ export const databaseService = {
   },
 
   async createTeam(team: Partial<Team>): Promise<Team> {
-    const newTeam = { ...team, id: `t_${Date.now()}` };
-    if (supabase && !this.isOffline) await supabase.from('teams').insert(newTeam);
+    const newTeam = { ...team, id: `t_${Date.now()}` } as Team;
     const teams = getLocal('teams') || [];
     saveLocal('teams', [...teams, newTeam]);
-    return newTeam as Team;
+    if (supabase && !this.isOffline) {
+      const { error } = await supabase.from('teams').insert(newTeam);
+      if (error) throw error;
+    }
+    return newTeam;
   },
 
   async updateTeam(id: string, updates: Partial<Team>): Promise<Team> {
@@ -148,11 +141,16 @@ export const databaseService = {
         batsmenStats: [],
         bowlerStats: []
       }]
-    };
-    if (supabase && !this.isOffline) await supabase.from('matches').insert(newMatch);
+    } as Match;
+
     const matches = getLocal('matches') || [];
     saveLocal('matches', [...matches, newMatch]);
-    return newMatch as Match;
+
+    if (supabase && !this.isOffline) {
+      const { error } = await supabase.from('matches').insert(newMatch);
+      if (error) throw error;
+    }
+    return newMatch;
   },
 
   async updateActivePlayers(matchId: string, updates: { strikerId?: string, nonStrikerId?: string, currentBowlerId?: string }): Promise<Match> {
