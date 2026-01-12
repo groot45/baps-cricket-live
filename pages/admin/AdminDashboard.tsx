@@ -38,6 +38,43 @@ const AdminDashboard: React.FC = () => {
   const [newMatch, setNewMatch] = useState({ teamAId: '', teamBId: '', venue: 'Arena 1', date: '' });
   const [newUser, setNewUser] = useState({ username: '', password: '', role: UserRole.SCORER });
 
+  const MIGRATION_SCRIPT = `-- SUPABASE MIGRATION SCRIPT
+-- Run this in your Supabase SQL Editor to ensure all columns exist!
+
+-- 1. Create Tables
+CREATE TABLE IF NOT EXISTS config (id TEXT PRIMARY KEY, name TEXT, "shortName" TEXT, year INTEGER, location TEXT, "logoUrl" TEXT, "bapsFullLogo" TEXT, "bapsSymbol" TEXT);
+CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, username TEXT UNIQUE, password TEXT, role TEXT);
+CREATE TABLE IF NOT EXISTS teams (id TEXT PRIMARY KEY, name TEXT, "shortName" TEXT, "logoUrl" TEXT);
+CREATE TABLE IF NOT EXISTS players (id TEXT PRIMARY KEY, name TEXT, "teamId" TEXT, "battingStyle" TEXT, "bowlingStyle" TEXT, role TEXT);
+CREATE TABLE IF NOT EXISTS matches (id TEXT PRIMARY KEY, "tournamentId" TEXT, "teamA" JSONB, "teamB" JSONB, status TEXT, "currentInnings" INTEGER, innings JSONB, "startTime" TEXT, venue TEXT, "maxOvers" INTEGER, "winnerId" TEXT, "resultSummary" TEXT);
+
+-- 2. Ensure missing columns exist (Safe execution)
+DO $$ 
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='players' AND column_name='battingStyle') THEN
+        ALTER TABLE players ADD COLUMN "battingStyle" TEXT DEFAULT 'Right Hand';
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='players' AND column_name='bowlingStyle') THEN
+        ALTER TABLE players ADD COLUMN "bowlingStyle" TEXT DEFAULT 'None';
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='matches' AND column_name='maxOvers') THEN
+        ALTER TABLE matches ADD COLUMN "maxOvers" INTEGER DEFAULT 20;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='matches' AND column_name='winnerId') THEN
+        ALTER TABLE matches ADD COLUMN "winnerId" TEXT;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='matches' AND column_name='resultSummary') THEN
+        ALTER TABLE matches ADD COLUMN "resultSummary" TEXT;
+    END IF;
+END $$;
+
+-- 3. Disable RLS for public access (Admin only app)
+ALTER TABLE config DISABLE ROW LEVEL SECURITY; 
+ALTER TABLE users DISABLE ROW LEVEL SECURITY; 
+ALTER TABLE teams DISABLE ROW LEVEL SECURITY; 
+ALTER TABLE players DISABLE ROW LEVEL SECURITY; 
+ALTER TABLE matches DISABLE ROW LEVEL SECURITY;`;
+
   const fetchData = async () => {
     setLoading(true);
     try {
@@ -99,16 +136,17 @@ const AdminDashboard: React.FC = () => {
       setPlayers(prev => [...prev, created]);
       setShowPlayerModal(false);
       
-      const tid = newPlayer.teamId;
+      const currentTid = newPlayer.teamId;
       setNewPlayer({ 
         name: '', 
-        teamId: tid, 
+        teamId: currentTid, 
         battingStyle: 'Right Hand', 
         bowlingStyle: 'Right Arm Fast', 
         role: 'Batsman' 
       });
     } catch (e) {
-      alert("Failed to add player: " + (e as any).message);
+      console.error(e);
+      alert("Failed to add player. Check console for details.");
     } finally {
       setLoading(false);
     }
@@ -134,15 +172,12 @@ const AdminDashboard: React.FC = () => {
     }
   };
 
-  const handleCreateUser = async () => {
-    if (!newUser.username || !newUser.password) return;
-    try {
-      const created = await databaseService.createUser(newUser);
-      setUsers(prev => [...prev, created]);
-      setShowUserModal(false);
-    } catch (e) {
-      alert("Failed to create user");
-    }
+  const handleConnectSupabase = async () => {
+    if (!sbUrl || !sbKey) { alert("Enter both URL and Key."); return; }
+    setLoading(true);
+    await databaseService.initRealm({ url: sbUrl, key: sbKey });
+    await fetchData();
+    setLoading(false);
   };
 
   if (!isAdmin) return <div className="p-8 text-center text-red-600 font-black uppercase tracking-widest">Access Denied</div>;
@@ -177,6 +212,7 @@ const AdminDashboard: React.FC = () => {
             {tab}
           </button>
         ))}
+        <button onClick={fetchData} className="px-4 py-3 rounded-xl text-pramukh-red hover:bg-red-50"><i className="fas fa-sync-alt"></i></button>
       </div>
 
       <div className="bg-white rounded-[2.5rem] shadow-2xl border border-slate-100 overflow-hidden min-h-[500px]">
@@ -256,14 +292,22 @@ const AdminDashboard: React.FC = () => {
               </div>
             )}
 
-            {activeTab === 'players' && (
-              <div className="p-10 grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
-                {players.length === 0 ? <div className="col-span-full p-20 text-center text-slate-300 font-black italic">No players added yet</div> : players.map(p => (
-                  <div key={p.id} className="bg-slate-50 p-5 rounded-2xl border-2 border-slate-100 text-center hover:border-pramukh-navy transition-all">
-                    <div className="text-sm font-black text-slate-700 uppercase italic mb-1">{p.name}</div>
-                    <div className="text-[9px] font-black text-slate-400 uppercase tracking-widest">{teams.find(t => t.id === p.teamId)?.shortName || 'UNASSIGNED'}</div>
-                  </div>
-                ))}
+            {activeTab === 'database' && (
+              <div className="p-12 space-y-12">
+                 <div className="bg-slate-50 p-10 rounded-[3rem] border-2 border-dashed border-slate-200 text-center">
+                    <div className="bg-white w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6 shadow-xl text-pramukh-navy border-4 border-slate-50"><i className={`fas fa-cloud-bolt text-3xl ${dbStatus.connected ? 'text-green-500' : 'text-slate-300'}`}></i></div>
+                    <h3 className="text-3xl font-black text-pramukh-navy uppercase italic mb-2 tracking-tighter">SUPABASE SCHEMA MANAGER</h3>
+                    <p className="text-slate-400 text-xs font-bold uppercase tracking-[0.3em] mb-10 max-w-xl mx-auto italic leading-relaxed">
+                      If you see errors like "Column not found", copy the script below and run it in your Supabase SQL Editor.
+                    </p>
+                    <div className="bg-pramukh-navy p-10 rounded-[2.5rem] shadow-xl text-white text-left max-w-2xl mx-auto">
+                       <h4 className="text-lg font-black uppercase italic mb-4">Migration Script</h4>
+                       <div className="bg-black/20 p-4 rounded-xl mb-6 max-h-48 overflow-y-auto text-[10px] font-mono whitespace-pre opacity-70">
+                          {MIGRATION_SCRIPT}
+                       </div>
+                       <button onClick={() => { navigator.clipboard.writeText(MIGRATION_SCRIPT); alert("Migration Script Copied!"); }} className="w-full bg-white text-pramukh-navy font-black py-4 rounded-xl uppercase italic tracking-widest hover:bg-slate-100"><i className="fas fa-copy mr-2"></i> Copy Migration SQL</button>
+                    </div>
+                 </div>
               </div>
             )}
           </>

@@ -33,7 +33,7 @@ export const databaseService = {
       const { error } = await supabase.from('matches').select('id').limit(1);
       if (error) {
         if (error.code === 'PGRST116' || error.message.includes('not find the table') || error.code === '42P01') {
-          this.lastError = "DB Connected. Run SQL script.";
+          this.lastError = "DB Connected. Run Migration Script.";
           this.isOffline = true;
           return;
         }
@@ -44,6 +44,7 @@ export const databaseService = {
       this.lastError = "";
     } catch (err: any) {
       this.isOffline = true;
+      this.lastError = err.message;
     }
   },
 
@@ -51,31 +52,42 @@ export const databaseService = {
     const local: Player[] = getLocal('players') || [];
     if (!supabase || this.isOffline) return local;
     try {
-      const { data } = await supabase.from('players').select('*');
+      const { data, error } = await supabase.from('players').select('*');
+      if (error) throw error;
       if (data) { 
-        // Sync local to remote: keep any local players that haven't hit the server yet
-        const remoteIds = new Set(data.map((p: any) => p.id));
-        const merged = [...(data as Player[])];
-        local.forEach(lp => {
-          if (!remoteIds.has(lp.id)) merged.push(lp);
-        });
-        saveLocal('players', merged); 
-        return merged; 
+        saveLocal('players', data); 
+        return data as Player[]; 
       }
-    } catch (e) {}
+    } catch (e) {
+      console.warn("DB Player Fetch Error:", e);
+    }
     return local;
   },
 
   async createPlayer(player: Partial<Player>): Promise<Player> {
-    const newPlayer = { ...player, id: `p_${Date.now()}` } as Player;
+    const newPlayer = { 
+      id: `p_${Date.now()}`,
+      name: player.name || 'Unknown',
+      teamId: player.teamId || '',
+      battingStyle: player.battingStyle || 'Right Hand',
+      bowlingStyle: player.bowlingStyle || 'None',
+      role: player.role || 'Batsman'
+    } as Player;
     
-    // Optimistic Save
+    // Save locally first
     const players = getLocal('players') || [];
     saveLocal('players', [...players, newPlayer]);
     
     if (supabase && !this.isOffline) {
-      const { error } = await supabase.from('players').insert(newPlayer);
-      if (error) throw error;
+      try {
+        const { error } = await supabase.from('players').insert(newPlayer);
+        if (error) {
+          console.error("Supabase Player Sync Error:", error);
+          // We don't throw here so the UI can still work locally
+        }
+      } catch (err) {
+        console.error("Supabase Exception:", err);
+      }
     }
     return newPlayer;
   },
@@ -84,25 +96,39 @@ export const databaseService = {
     const local: Team[] = getLocal('teams') || [];
     if (!supabase || this.isOffline) return local;
     try {
-      const { data } = await supabase.from('teams').select('*');
-      if (data) { saveLocal('teams', data); return data; }
-    } catch (e) {}
+      const { data, error } = await supabase.from('teams').select('*');
+      if (error) throw error;
+      if (data) { saveLocal('teams', data); return data as Team[]; }
+    } catch (e) {
+      console.warn("DB Team Fetch Error:", e);
+    }
     return local;
   },
 
   async createTeam(team: Partial<Team>): Promise<Team> {
-    const newTeam = { ...team, id: `t_${Date.now()}` } as Team;
+    const newTeam = { 
+      id: `t_${Date.now()}`, 
+      name: team.name || '', 
+      shortName: team.shortName || '', 
+      logoUrl: team.logoUrl || '' 
+    } as Team;
+    
     const teams = getLocal('teams') || [];
     saveLocal('teams', [...teams, newTeam]);
+    
     if (supabase && !this.isOffline) {
-      const { error } = await supabase.from('teams').insert(newTeam);
-      if (error) throw error;
+      try {
+        const { error } = await supabase.from('teams').insert(newTeam);
+        if (error) console.error("Supabase Team Sync Error:", error);
+      } catch (err) {}
     }
     return newTeam;
   },
 
   async updateTeam(id: string, updates: Partial<Team>): Promise<Team> {
-    if (supabase && !this.isOffline) await supabase.from('teams').update(updates).eq('id', id);
+    if (supabase && !this.isOffline) {
+      try { await supabase.from('teams').update(updates).eq('id', id); } catch(e){}
+    }
     const teams = await this.getTeams();
     const idx = teams.findIndex(t => t.id === id);
     if (idx !== -1) {
@@ -117,16 +143,23 @@ export const databaseService = {
     const local: Match[] = getLocal('matches') || [];
     if (!supabase || this.isOffline) return local;
     try {
-      const { data } = await supabase.from('matches').select('*');
-      if (data) { saveLocal('matches', data); return data; }
-    } catch (e) {}
+      const { data, error } = await supabase.from('matches').select('*');
+      if (error) throw error;
+      if (data) { saveLocal('matches', data); return data as Match[]; }
+    } catch (e) {
+      console.warn("DB Match Fetch Error:", e);
+    }
     return local;
   },
 
   async createMatch(match: any): Promise<Match> {
     const newMatch = { 
-      ...match, 
-      id: `m_${Date.now()}`, 
+      id: `m_${Date.now()}`,
+      tournamentId: match.tournamentId || TOURNAMENT.id,
+      teamA: match.teamA, 
+      teamB: match.teamB, 
+      venue: match.venue || 'Arena',
+      startTime: match.startTime || new Date().toISOString(),
       status: 'UPCOMING',
       currentInnings: 1,
       maxOvers: 20,
@@ -147,8 +180,10 @@ export const databaseService = {
     saveLocal('matches', [...matches, newMatch]);
 
     if (supabase && !this.isOffline) {
-      const { error } = await supabase.from('matches').insert(newMatch);
-      if (error) throw error;
+      try {
+        const { error } = await supabase.from('matches').insert(newMatch);
+        if (error) console.error("Supabase Match Sync Error:", error);
+      } catch (err) {}
     }
     return newMatch;
   },
