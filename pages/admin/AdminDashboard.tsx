@@ -188,7 +188,7 @@ const AdminDashboard: React.FC = () =&gt; {
                        &lt;i className={`fas fa-cloud-bolt text-3xl ${dbStatus.connected ? 'text-green-500' : 'text-slate-300'}`}&gt;&lt;/i&gt;
                     &lt;/div&gt;
                     &lt;h3 className="text-3xl font-black text-pramukh-navy uppercase italic mb-2 tracking-tighter"&gt;Vercel ↔ Atlas Cluster: &lt;span className="text-pramukh-red"&gt;nktsar9&lt;/span&gt;&lt;/h3&gt;
-                    &lt;p className="text-slate-400 text-xs font-bold uppercase tracking-[0.3em] mb-10 max-w-md mx-auto"&gt;The app is currently in **{dbStatus.mode}**. Enter your MongoDB App ID below to enable cloud syncing.&lt;/p&gt;
+                    &lt;p className="text-slate-400 text-xs font-bold uppercase tracking-[0.3em] mb-10 max-w-md mx-auto"&gt;The app is currently in {dbStatus.mode}. Enter your MongoDB App ID below to enable cloud syncing.&lt;/p&gt;
                     
                     &lt;div className="max-w-md mx-auto space-y-4"&gt;
                        &lt;input 
@@ -228,7 +228,9 @@ const AdminDashboard: React.FC = () =&gt; {
                           &lt;span className="truncate"&gt;VITE_MONGODB_APP_ID = &lt;span className="text-pramukh-red font-black"&gt;{mongoAppId || 'PASTE_ID_ABOVE'}&lt;/span&gt;&lt;/span&gt;
                           &lt;i className="fas fa-copy opacity-0 group-hover:opacity-100 transition-opacity ml-4"&gt;&lt;/i&gt;
                        &lt;/div&gt;
-                       &lt;p className="text-[10px] uppercase font-black tracking-widest opacity-40"&gt;**Note:** Vercel builds take ~1 min to update after you save environment variables.&lt;/p&gt;
+                                  <p className="text-[10px] uppercase font-black tracking-widest opacity-40">
+  <strong>Note:</strong> Vercel builds take ~1 min to update after you save environment variables.
+</p>
                     &lt;/div&gt;
                  &lt;/div&gt;
               &lt;/div&gt;
