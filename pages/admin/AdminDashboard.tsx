@@ -14,7 +14,7 @@ const AdminDashboard: React.FC = () => {
   const [matches, setMatches] = useState<Match[]>([]);
   const [users, setUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
-  const [dbStatus, setDbStatus] = useState({ connected: false, mode: 'Offline' });
+  const [dbStatus, setDbStatus] = useState({ connected: false, mode: 'Offline', error: '' });
 
   const [tempConfig, setTempConfig] = useState<TournamentConfig>(config);
   const [mongoAppId, setMongoAppId] = useState(localStorage.getItem('realm_app_id') || '');
@@ -27,7 +27,7 @@ const AdminDashboard: React.FC = () => {
   const [editingUser, setEditingUser] = useState<any>(null);
   const [newTeam, setNewTeam] = useState({ name: '', shortName: '', logoUrl: '' });
   const [newPlayer, setNewPlayer] = useState({ name: '' });
-  const [newMatch, setNewMatch] = useState({ teamAId: '', teamBId: '', venue: 'Indoor Arena 1', date: '' });
+  const [newMatch, setNewMatch] = useState({ teamAId: '', teamBId: '', venue: 'Arena 1', date: '' });
   const [newUser, setNewUser] = useState({ username: '', password: '', role: UserRole.SCORER });
 
   const fetchData = async () => {
@@ -45,7 +45,8 @@ const AdminDashboard: React.FC = () => {
       setUsers(u);
       setDbStatus({ 
         connected: databaseService.isAtlasConnected, 
-        mode: databaseService.isAtlasConnected ? 'Atlas Cloud (Live)' : 'Local Storage Only' 
+        mode: databaseService.isAtlasConnected ? 'Atlas Cloud (Live)' : 'Local Storage Only',
+        error: databaseService.lastError
       });
     } catch (err) {
       console.error("Critical Load Error:", err);
@@ -69,14 +70,21 @@ const AdminDashboard: React.FC = () => {
         alert("Please enter a valid App ID first.");
         return;
     }
+    
+    if (mongoAppId.startsWith('mongodb')) {
+        alert("STOP! You pasted a Connection String (mongodb+srv://...). \n\nThis app needs an 'App ID' from the 'App Services' tab in MongoDB Atlas.");
+        return;
+    }
+
     setLoading(true);
     await databaseService.initRealm(mongoAppId);
     await fetchData();
     setLoading(false);
+    
     if (databaseService.isAtlasConnected) {
-        alert("Success! Connected to MongoDB Atlas Cloud.");
+        alert("SUCCESS! The app is now connected to your MongoDB Cloud cluster.");
     } else {
-        alert("Connection failed. Check your App ID and ensure 'Allow Anonymous Authentication' is enabled in your MongoDB App Service dashboard.");
+        alert("CONNECTION FAILED.\n\nError: " + databaseService.lastError);
     }
   };
 
@@ -117,7 +125,10 @@ const AdminDashboard: React.FC = () => {
   const handleCreateMatch = async () => {
     const teamA = teams.find(t => t.id === newMatch.teamAId);
     const teamB = teams.find(t => t.id === newMatch.teamBId);
-    if (!teamA || !teamB) return;
+    if (!teamA || !teamB) {
+        alert("Please select both teams.");
+        return;
+    }
 
     await databaseService.createMatch({
       teamA,
@@ -155,7 +166,7 @@ const AdminDashboard: React.FC = () => {
         </div>
       </div>
 
-      <div className="flex space-x-2 mb-8 bg-slate-200/50 p-1.5 rounded-2xl w-fit overflow-x-auto max-w-full">
+      <div className="flex space-x-2 mb-8 bg-slate-200/50 p-1.5 rounded-2xl w-fit overflow-x-auto max-w-full no-scrollbar">
         {(['matches', 'teams', 'players', 'staff', 'settings', 'database'] as const).map((tab) => (
           <button key={tab} onClick={() => setActiveTab(tab)} className={`px-6 md:px-8 py-3 rounded-xl font-black uppercase tracking-widest text-xs transition-all whitespace-nowrap ${activeTab === tab ? 'bg-pramukh-navy text-white shadow-lg italic scale-105' : 'text-slate-400 hover:text-slate-600'}`}>
             {tab}
@@ -225,50 +236,58 @@ const AdminDashboard: React.FC = () => {
                     <div className="bg-white w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6 shadow-xl text-pramukh-navy border-4 border-slate-50">
                        <i className={`fas fa-cloud-bolt text-3xl ${dbStatus.connected ? 'text-green-500' : 'text-slate-300'}`}></i>
                     </div>
-                    <h3 className="text-3xl font-black text-pramukh-navy uppercase italic mb-2 tracking-tighter">Vercel ↔ Atlas Cluster: <span className="text-pramukh-red">nktsar9</span></h3>
-                    <p className="text-slate-400 text-xs font-bold uppercase tracking-[0.3em] mb-10 max-w-md mx-auto">The app is currently in {dbStatus.mode}. Enter your MongoDB App ID below to enable cloud syncing.</p>
+                    <h3 className="text-3xl font-black text-pramukh-navy uppercase italic mb-2 tracking-tighter">MONGODB CLOUD SETUP</h3>
+                    <p className="text-slate-400 text-xs font-bold uppercase tracking-[0.3em] mb-10 max-w-xl mx-auto">
+                      {"The app needs a 'MongoDB App ID' (found in the App Services tab), NOT a 'Connection String' (mongodb+srv://...)."}
+                    </p>
                     
                     <div className="max-w-md mx-auto space-y-4">
                        <input 
                          type="text" 
                          className="w-full px-8 py-5 bg-white border-2 border-slate-100 rounded-2xl font-black text-center text-xl tracking-widest focus:border-pramukh-navy outline-none shadow-inner" 
-                         placeholder="Paste App ID (e.g. pc-live-abcde)" 
+                         placeholder="App ID (e.g. baps-live-abcde)" 
                          value={mongoAppId}
                          onChange={(e) => setMongoAppId(e.target.value)}
                        />
                        <button onClick={handleConnectMongo} className="w-full bg-pramukh-navy text-white font-black py-5 rounded-2xl uppercase italic tracking-widest shadow-xl hover:brightness-125 transition-all">
-                         Test & Connect Atlas
+                         Test & Sync Cloud
                        </button>
                     </div>
+
+                    {dbStatus.error && (
+                        <div className="mt-8 bg-red-50 text-red-600 p-6 rounded-2xl border-2 border-red-100 text-xs font-black uppercase tracking-widest max-w-2xl mx-auto text-left leading-relaxed">
+                            <i className="fas fa-triangle-exclamation mr-3 text-lg"></i>
+                            {dbStatus.error}
+                        </div>
+                    )}
                  </div>
 
                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                     <div className="bg-white p-10 rounded-[2.5rem] border-2 border-slate-100 shadow-sm">
-                       <h4 className="text-lg font-black text-pramukh-navy uppercase italic mb-6">Setup in 3 Minutes</h4>
+                       <h4 className="text-lg font-black text-pramukh-navy uppercase italic mb-6">Step-by-Step Guide</h4>
                        <ol className="space-y-4 text-sm font-bold text-slate-500 list-decimal pl-6">
-                          <li>{"Login to MongoDB Atlas and find your cluster nktsar9."}</li>
-                          <li>{"Click the App Services tab at the top of the Atlas page."}</li>
-                          <li>{"Click Create App (choose 'Build from Scratch')."}</li>
-                          <li>{"Copy the App ID (found at the top left of the dashboard)."}</li>
-                          <li>{"In your App Service: Go to Authentication > Enable Allow Anonymous Login."}</li>
-                          <li>{"In your App Service: Go to Data Access > Rules > Link your cluster and enable Read/Write."}</li>
+                          <li>{"Go to MongoDB Atlas and login to your 'nktsar9' cluster."}</li>
+                          <li>{"At the very top of the page, click the 'App Services' tab."}</li>
+                          <li>{"Create a new app (Build from scratch). Link it to your cluster."}</li>
+                          <li>{"Once created, copy the 'App ID' from the top left (it looks like 'baps-live-abcde')."}</li>
+                          <li>{"In App Services dashboard: Go to Authentication > Enable 'Allow Anonymous Login'."}</li>
+                          <li>{"In App Services dashboard: Go to Data Access > Rules > Create a rule for your database to allow Read/Write."}</li>
                        </ol>
                     </div>
                     <div className="bg-pramukh-navy p-10 rounded-[2.5rem] shadow-xl text-white">
-                       <h4 className="text-lg font-black uppercase italic mb-6">Vercel Deployment Sync</h4>
-                       <p className="text-sm opacity-80 mb-4 italic leading-relaxed">
-                         {"To make this permanent for all users on Vercel, go to your Vercel Project Settings > Environment Variables and add:"}
-                       </p>
-                       <div className="bg-white/10 p-5 rounded-xl font-mono text-xs mb-6 flex justify-between items-center group cursor-pointer border border-white/20" onClick={() => {
-                          navigator.clipboard.writeText(`VITE_MONGODB_APP_ID=${mongoAppId || 'your-app-id'}`);
-                          alert("Variable copied! Paste this in Vercel.");
-                       }}>
-                          <span className="truncate">VITE_MONGODB_APP_ID = <span className="text-pramukh-red font-black">{mongoAppId || 'PASTE_ID_ABOVE'}</span></span>
-                          <i className="fas fa-copy opacity-0 group-hover:opacity-100 transition-opacity ml-4"></i>
+                       <h4 className="text-lg font-black uppercase italic mb-6">Connection String vs App ID</h4>
+                       <div className="space-y-4">
+                          <div className="p-4 bg-red-500/20 rounded-xl border border-red-500/30">
+                             <div className="text-[10px] font-black uppercase tracking-widest opacity-60 mb-2">Wrong (Connection String)</div>
+                             <code className="text-xs break-all opacity-80">mongodb+srv://kaushal:kaushal@...</code>
+                             <p className="text-[10px] mt-2 italic text-red-200 uppercase">This is for servers, not frontend apps!</p>
+                          </div>
+                          <div className="p-4 bg-green-500/20 rounded-xl border border-green-500/30">
+                             <div className="text-[10px] font-black uppercase tracking-widest opacity-60 mb-2">Correct (App ID)</div>
+                             <code className="text-xs break-all font-black text-green-300">baps-live-abcde</code>
+                             <p className="text-[10px] mt-2 italic text-green-200 uppercase">Found in the top-left of App Services Dashboard.</p>
+                          </div>
                        </div>
-                       <p className="text-[10px] uppercase font-black tracking-widest opacity-40 italic">
-                         Note: Vercel builds take ~1 min to update after you save environment variables.
-                       </p>
                     </div>
                  </div>
               </div>
@@ -286,7 +305,7 @@ const AdminDashboard: React.FC = () => {
                         </div>
                         <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-1">
-                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Short Title (Navbar)</label>
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Short Title</label>
                                 <input type="text" className="w-full px-6 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-black uppercase italic" value={tempConfig.shortName} onChange={e => setTempConfig({...tempConfig, shortName: e.target.value})} />
                             </div>
                             <div className="space-y-1">
@@ -294,18 +313,7 @@ const AdminDashboard: React.FC = () => {
                                 <input type="number" className="w-full px-6 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-black italic" value={tempConfig.year} onChange={e => setTempConfig({...tempConfig, year: parseInt(e.target.value)})} />
                             </div>
                         </div>
-                        <div className="space-y-1">
-                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Tournament Logo (URL)</label>
-                            <input type="text" className="w-full px-6 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-black italic" value={tempConfig.logoUrl} onChange={e => setTempConfig({...tempConfig, logoUrl: e.target.value})} />
-                        </div>
-                        <button onClick={handleSaveSettings} className="bg-pramukh-navy text-white font-black px-10 py-5 rounded-2xl uppercase italic tracking-widest shadow-xl hover:brightness-125 transition-all w-full lg:w-fit">Save Tournament Brand</button>
-                    </div>
-                    
-                    <div className="bg-slate-50 rounded-[3rem] p-10 flex flex-col items-center justify-center text-center border-4 border-dashed border-slate-200">
-                        <div className="bg-white p-6 rounded-[2rem] shadow-xl mb-6 w-32 h-32 flex items-center justify-center overflow-hidden border-2 border-pramukh-red/10">
-                            {tempConfig.logoUrl ? <img src={tempConfig.logoUrl} className="w-full h-full object-contain" /> : <i className="fas fa-trophy text-5xl text-pramukh-navy"></i>}
-                        </div>
-                        <h4 className="text-2xl font-black text-slate-800 uppercase italic tracking-tighter">{tempConfig.name}</h4>
+                        <button onClick={handleSaveSettings} className="bg-pramukh-navy text-white font-black px-10 py-5 rounded-2xl uppercase italic tracking-widest shadow-xl hover:brightness-125 transition-all w-full lg:w-fit">Save Brand</button>
                     </div>
                     </div>
                 </section>
@@ -315,19 +323,11 @@ const AdminDashboard: React.FC = () => {
             {activeTab === 'staff' && (
               <div className="p-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {users.map(u => (
-                  <div key={u.id} className="bg-slate-50 p-8 rounded-[2rem] border-2 border-slate-100 flex items-center justify-between group hover:border-pramukh-navy transition-all shadow-sm">
-                    <div className="flex items-center space-x-4">
-                      <div className={`w-14 h-14 rounded-2xl flex items-center justify-center font-black text-white italic shadow-lg ${u.role === UserRole.ADMIN ? 'bg-pramukh-red' : 'bg-pramukh-navy'}`}>
-                        <i className={`fas ${u.role === UserRole.ADMIN ? 'fa-crown' : 'fa-clipboard-user'}`}></i>
-                      </div>
-                      <div>
-                        <div className="font-black text-slate-800 uppercase italic leading-none text-lg">{u.username}</div>
-                        <div className="text-[10px] text-slate-400 font-black tracking-widest mt-1 uppercase italic">{u.role}</div>
-                      </div>
+                  <div key={u.id} className="bg-slate-50 p-8 rounded-[2rem] border-2 border-slate-100 flex items-center justify-between shadow-sm group hover:border-pramukh-navy transition-all">
+                    <div>
+                      <div className="font-black text-slate-800 uppercase italic text-lg leading-none">{u.username}</div>
+                      <div className="text-[10px] text-slate-400 font-black tracking-widest uppercase italic mt-1">{u.role}</div>
                     </div>
-                    <button onClick={() => { setEditingUser(u); setNewUser({ username: u.username, password: '', role: u.role }); setShowUserModal(true); }} className="w-10 h-10 bg-white rounded-xl shadow-sm text-slate-300 hover:text-pramukh-navy hover:shadow-md transition-all border border-slate-100 flex items-center justify-center">
-                       <i className="fas fa-edit"></i>
-                    </button>
                   </div>
                 ))}
               </div>
@@ -342,8 +342,7 @@ const AdminDashboard: React.FC = () => {
             <h2 className="text-3xl font-black text-pramukh-navy uppercase italic mb-8 text-center">REGISTER TEAM</h2>
             <div className="space-y-5">
               <input type="text" className="w-full px-6 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-black uppercase italic" placeholder="Team Name" value={newTeam.name} onChange={e => setNewTeam({...newTeam, name: e.target.value})} />
-              <input type="text" className="w-full px-6 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-black uppercase italic" placeholder="Short Name (3-4 Letters)" value={newTeam.shortName} onChange={e => setNewTeam({...newTeam, shortName: e.target.value})} />
-              <input type="text" className="w-full px-6 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-black italic" placeholder="Logo URL (Optional)" value={newTeam.logoUrl} onChange={e => setNewTeam({...newTeam, logoUrl: e.target.value})} />
+              <input type="text" className="w-full px-6 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-black uppercase italic" placeholder="Short Name (e.g. SKT)" value={newTeam.shortName} onChange={e => setNewTeam({...newTeam, shortName: e.target.value})} />
               <div className="flex gap-4 pt-4">
                 <button onClick={handleCreateTeam} className="flex-1 bg-pramukh-navy text-white font-black py-4 rounded-xl uppercase italic shadow-lg">Save Team</button>
                 <button onClick={() => setShowTeamModal(false)} className="flex-1 bg-slate-100 text-slate-400 font-black py-4 rounded-xl uppercase italic">Cancel</button>
@@ -371,16 +370,12 @@ const AdminDashboard: React.FC = () => {
       {showUserModal && (
         <div className="fixed inset-0 bg-pramukh-navy/95 backdrop-blur-xl flex items-center justify-center p-6 z-[100]">
           <div className="bg-white rounded-[3rem] w-full max-w-md p-12 shadow-2xl border-b-[16px] border-pramukh-red">
-            <h2 className="text-3xl font-black text-pramukh-navy uppercase italic mb-8 text-center">{editingUser ? 'UPDATE ACCOUNT' : 'CREATE STAFF'}</h2>
+            <h2 className="text-3xl font-black text-pramukh-navy uppercase italic mb-8 text-center">CREATE STAFF</h2>
             <div className="space-y-5">
               <input type="text" className="w-full px-6 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-black uppercase italic" placeholder="Username" value={newUser.username} onChange={e => setNewUser({...newUser, username: e.target.value})} />
               <input type="password" placeholder="Password" className="w-full px-6 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-black italic" value={newUser.password} onChange={e => setNewUser({...newUser, password: e.target.value})} />
-              <select className="w-full px-6 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-black uppercase italic" value={newUser.role} onChange={e => setNewUser({...newUser, role: e.target.value as UserRole})}>
-                 <option value={UserRole.SCORER}>Scorer</option>
-                 <option value={UserRole.ADMIN}>Admin</option>
-              </select>
               <div className="flex gap-4 pt-4">
-                <button onClick={handleCreateUser} className="flex-1 bg-pramukh-navy text-white font-black py-4 rounded-xl uppercase italic shadow-lg">{editingUser ? 'Update' : 'Save'}</button>
+                <button onClick={handleCreateUser} className="flex-1 bg-pramukh-navy text-white font-black py-4 rounded-xl uppercase italic shadow-lg">Save</button>
                 <button onClick={() => setShowUserModal(false)} className="flex-1 bg-slate-100 text-slate-400 font-black py-4 rounded-xl uppercase italic">Cancel</button>
               </div>
             </div>

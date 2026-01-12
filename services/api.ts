@@ -1,6 +1,6 @@
 
-import * as Realm from "https://esm.sh/realm-web";
-import { API_BASE_URL, TOURNAMENT, MONGODB_CONFIG } from '../config/tournament';
+import * as Realm from "realm-web";
+import { TOURNAMENT, MONGODB_CONFIG } from '../config/tournament';
 import { Match, Team, Player, User, UserRole, TournamentConfig } from '../types';
 
 let realmApp: Realm.App | null = null;
@@ -18,22 +18,35 @@ const saveLocal = (key: string, data: any) => {
 export const databaseService = {
   isOffline: true,
   isAtlasConnected: false,
+  lastError: "",
 
   async initRealm(appId?: string) {
     const id = appId || MONGODB_CONFIG.APP_ID || localStorage.getItem('realm_app_id');
     
-    if (!id) {
+    // Safety check: Don't try to connect if ID is the placeholder or empty
+    if (!id || id === 'baps-live-xxxxx' || id === "") {
+      this.isAtlasConnected = false;
+      this.isOffline = true;
+      return;
+    }
+
+    // Check if user accidentally pasted a connection string
+    if (id.startsWith('mongodb')) {
+      this.lastError = "Wrong ID type! You pasted a Connection String (mongodb+srv://...). You must use a MongoDB App ID (e.g., baps-live-abcde) from the App Services tab.";
+      console.error(this.lastError);
       this.isAtlasConnected = false;
       this.isOffline = true;
       return;
     }
 
     try {
+      console.log("Connecting to MongoDB App Service:", id);
       if (!realmApp || realmApp.id !== id) {
         realmApp = new Realm.App({ id });
       }
       
       if (!realmApp.currentUser) {
+        // Log in anonymously. Ensure "Allow Anonymous Authentication" is ON in Atlas App Services.
         mongoUser = await realmApp.logIn(Realm.Credentials.anonymous());
       } else {
         mongoUser = realmApp.currentUser;
@@ -41,9 +54,12 @@ export const databaseService = {
 
       this.isAtlasConnected = true;
       this.isOffline = false;
+      this.lastError = "";
       localStorage.setItem('realm_app_id', id);
-    } catch (err) {
-      console.error("Atlas Connection Failed:", err);
+      console.log("Successfully connected to Atlas Cloud!");
+    } catch (err: any) {
+      this.lastError = `Connection Failed: ${err.message || 'Unknown error'}. Check your App ID and ensure Anonymous Login is enabled.`;
+      console.error("Atlas Connection Error:", err);
       this.isAtlasConnected = false;
       this.isOffline = true;
     }
@@ -51,22 +67,27 @@ export const databaseService = {
 
   async getCollection(name: string) {
     if (!mongoUser || !realmApp) return null;
-    return mongoUser.mongoClient("mongodb-atlas").db("baps-cricket-live").collection(name);
+    try {
+        // Database name should match what you set in Atlas
+        return mongoUser.mongoClient("mongodb-atlas").db("baps-cricket-live").collection(name);
+    } catch (e) {
+        console.error(`Collection ${name} access error:`, e);
+        return null;
+    }
   },
 
-  // TOURNAMENT CONFIG
   async getTournamentConfig(): Promise<TournamentConfig> {
     const col = await this.getCollection("config");
     if (col) {
-      const data = await col.findOne({ id: TOURNAMENT.id });
-      if (data) {
-        saveLocal('config', data);
-        return data as any;
-      }
+      try {
+        const data = await col.findOne({ id: TOURNAMENT.id });
+        if (data) {
+          saveLocal('config', data);
+          return data as any;
+        }
+      } catch (e) { console.error(e); }
     }
-    
-    const local = getLocal('config');
-    return local || {
+    return getLocal('config') || {
       id: TOURNAMENT.id,
       name: TOURNAMENT.name,
       shortName: "PRAMUKH CUP",
@@ -81,24 +102,27 @@ export const databaseService = {
   async updateTournamentConfig(config: TournamentConfig): Promise<TournamentConfig> {
     const col = await this.getCollection("config");
     if (col) {
-      await col.updateOne({ id: config.id }, { $set: config }, { upsert: true });
+      try {
+        await col.updateOne({ id: config.id }, { $set: config }, { upsert: true });
+      } catch (e) { console.error(e); }
     }
     saveLocal('config', config);
     return config;
   },
 
-  // USERS
   async getUsers(): Promise<User[]> {
     const col = await this.getCollection("users");
     let users: any[] = [];
     if (col) {
-      users = await col.find();
-      saveLocal('users', users);
+      try {
+        users = await col.find();
+        saveLocal('users', users);
+      } catch (e) { console.error(e); }
     } else {
       users = getLocal('users') || [];
     }
 
-    // ENSURE DEFAULT ADMINS ALWAYS EXIST
+    // Default hardcoded admins
     const defaultAdmins = [
       { id: 'u_admin', username: 'admin', password: 'admin123', role: UserRole.ADMIN },
       { id: 'u_kaushal', username: 'kaushal', password: 'kaushal', role: UserRole.ADMIN }
@@ -117,38 +141,36 @@ export const databaseService = {
     const newUser = { ...user, id: `u_${Date.now()}` };
     const col = await this.getCollection("users");
     if (col) {
-      await col.insertOne(newUser);
+      try { await col.insertOne(newUser); } catch (e) { console.error(e); }
     }
-    const users = await this.getUsers();
-    if (!col) saveLocal('users', [...users, newUser]);
+    const users = getLocal('users') || [];
+    saveLocal('users', [...users, newUser]);
     return newUser as User;
   },
 
-  async updateUser(userId: string, updates: Partial<User & { password?: string }>): Promise<User> {
+  async updateUser(id: string, user: Partial<User & { password?: string }>): Promise<User | null> {
     const col = await this.getCollection("users");
     if (col) {
-      await col.updateOne({ id: userId }, { $set: updates });
+      try { await col.updateOne({ id }, { $set: user }); } catch (e) { console.error(e); }
     }
-    const users = await this.getUsers();
-    const index = users.findIndex(u => u.id === userId);
+    const users = getLocal('users') || [];
+    const index = users.findIndex((u: any) => u.id === id);
     if (index !== -1) {
-      const updated = { ...users[index], ...updates };
-      if (!col) {
-        users[index] = updated;
-        saveLocal('users', users);
-      }
-      return updated;
+      users[index] = { ...users[index], ...user };
+      saveLocal('users', users);
+      return users[index];
     }
-    throw new Error("User not found");
+    return null;
   },
 
-  // TEAMS
   async getTeams(): Promise<Team[]> {
     const col = await this.getCollection("teams");
     if (col) {
-      const data = await col.find();
-      saveLocal('teams', data);
-      return data as any;
+      try {
+        const data = await col.find();
+        saveLocal('teams', data);
+        return data as any;
+      } catch (e) { console.error(e); }
     }
     return getLocal('teams') || [];
   },
@@ -157,20 +179,21 @@ export const databaseService = {
     const newTeam = { ...team, id: `t_${Date.now()}` };
     const col = await this.getCollection("teams");
     if (col) {
-      await col.insertOne(newTeam);
+      try { await col.insertOne(newTeam); } catch (e) { console.error(e); }
     }
-    const teams = await this.getTeams();
-    if (!col) saveLocal('teams', [...teams, newTeam]);
+    const teams = getLocal('teams') || [];
+    saveLocal('teams', [...teams, newTeam]);
     return newTeam as Team;
   },
 
-  // PLAYERS
   async getPlayers(): Promise<Player[]> {
     const col = await this.getCollection("players");
     if (col) {
-      const data = await col.find();
-      saveLocal('players', data);
-      return data as any;
+      try {
+        const data = await col.find();
+        saveLocal('players', data);
+        return data as any;
+      } catch (e) { console.error(e); }
     }
     return getLocal('players') || [];
   },
@@ -179,20 +202,21 @@ export const databaseService = {
     const newPlayer = { ...player, id: `p_${Date.now()}` };
     const col = await this.getCollection("players");
     if (col) {
-      await col.insertOne(newPlayer);
+      try { await col.insertOne(newPlayer); } catch (e) { console.error(e); }
     }
-    const players = await this.getPlayers();
-    if (!col) saveLocal('players', [...players, newPlayer]);
+    const players = getLocal('players') || [];
+    saveLocal('players', [...players, newPlayer]);
     return newPlayer as Player;
   },
 
-  // MATCHES
   async getMatches(): Promise<Match[]> {
     const col = await this.getCollection("matches");
     if (col) {
-      const data = await col.find();
-      saveLocal('matches', data);
-      return data as any;
+      try {
+        const data = await col.find();
+        saveLocal('matches', data);
+        return data as any;
+      } catch (e) { console.error(e); }
     }
     return getLocal('matches') || [];
   },
@@ -203,14 +227,14 @@ export const databaseService = {
       id: `m_${Date.now()}`, 
       status: 'UPCOMING',
       currentInnings: 1,
-      innings: [{ runs: 0, wickets: 0, overs: 0, balls: 0 }]
+      innings: [{ runs: 0, wickets: 0, overs: 0, balls: 0, battingTeamId: match.teamA.id, bowlingTeamId: match.teamB.id, oversHistory: [] }]
     };
     const col = await this.getCollection("matches");
     if (col) {
-      await col.insertOne(newMatch);
+      try { await col.insertOne(newMatch); } catch (e) { console.error(e); }
     }
-    const matches = await this.getMatches();
-    if (!col) saveLocal('matches', [...matches, newMatch]);
+    const matches = getLocal('matches') || [];
+    saveLocal('matches', [...matches, newMatch]);
     return newMatch as Match;
   },
 
@@ -222,11 +246,8 @@ export const databaseService = {
     const match = { ...matches[matchIndex] };
     const currentInning = match.innings[match.currentInnings - 1];
 
-    if (scoreUpdate.isWicket) {
-      currentInning.wickets += 1;
-    } else {
-      currentInning.runs += scoreUpdate.run;
-    }
+    if (scoreUpdate.isWicket) currentInning.wickets += 1;
+    else currentInning.runs += scoreUpdate.run;
 
     if (!scoreUpdate.isExtra || (scoreUpdate.extraType !== 'wide' && scoreUpdate.extraType !== 'no-ball')) {
       currentInning.balls += 1;
@@ -235,12 +256,12 @@ export const databaseService = {
         currentInning.balls = 0;
       }
     } else {
-      currentInning.runs += 1;
+      currentInning.runs += 1; // Extra run for wide/nb
     }
 
     const col = await this.getCollection("matches");
     if (col) {
-      await col.updateOne({ id: matchId }, { $set: { innings: match.innings } });
+      try { await col.updateOne({ id: matchId }, { $set: { innings: match.innings } }); } catch (e) { console.error(e); }
     }
     
     matches[matchIndex] = match;

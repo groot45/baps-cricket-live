@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useTournament } from '../context/TournamentContext';
@@ -14,30 +14,38 @@ const Login: React.FC = () => {
   const { login } = useAuth();
   const { config } = useTournament();
   const navigate = useNavigate();
-  const [symErr, setSymErr] = useState(false);
+  const [dbActive, setDbActive] = useState(false);
+
+  useEffect(() => {
+    setDbActive(databaseService.isAtlasConnected);
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError('');
 
+    const lowerUser = username.toLowerCase();
+
+    // ABSOLUTE FAIL-SAFE CHECK (PRIORITY 1)
+    if (lowerUser === 'admin' && password === 'admin123') {
+      console.log("Admin Bypass Triggered");
+      login({ id: 'u_admin', username: 'admin', role: UserRole.ADMIN, token: 'dev-token' });
+      navigate('/admin');
+      return;
+    }
+
+    if (lowerUser === 'kaushal' && password === 'kaushal') {
+      console.log("Kaushal Bypass Triggered");
+      login({ id: 'u_kaushal', username: 'kaushal', role: UserRole.ADMIN, token: 'dev-token' });
+      navigate('/admin');
+      return;
+    }
+
     try {
-      // Hardcoded fail-safe check
-      if (username.toLowerCase() === 'admin' && password === 'admin123') {
-        login({ id: 'u_admin', username: 'admin', role: UserRole.ADMIN, token: 'dev-token' });
-        navigate('/admin');
-        return;
-      }
-
-      if (username.toLowerCase() === 'kaushal' && password === 'kaushal') {
-        login({ id: 'u_kaushal', username: 'kaushal', role: UserRole.ADMIN, token: 'dev-token' });
-        navigate('/admin');
-        return;
-      }
-
       const users = await databaseService.getUsers();
       const foundUser = users.find((u: any) => 
-        u.username.toLowerCase() === username.toLowerCase() && 
+        u.username.toLowerCase() === lowerUser && 
         u.password === password
       );
 
@@ -58,8 +66,8 @@ const Login: React.FC = () => {
         setError('Verification Failed. Invalid credentials.');
       }
     } catch (err) {
-      console.error(err);
-      setError('System error. Please try again.');
+      console.error("Login Error:", err);
+      setError('System connection issue. Check MongoDB settings.');
     } finally {
       setLoading(false);
     }
@@ -76,28 +84,16 @@ const Login: React.FC = () => {
         <div className="text-center">
           <div className="flex justify-center mb-8">
              <div className="bg-pramukh-navy p-6 rounded-[2.5rem] shadow-2xl border-4 border-pramukh-red transform -rotate-2 flex items-center justify-center overflow-hidden">
-                 {config.bapsSymbol && !symErr ? (
-                    <img src={config.bapsSymbol} className="w-20 h-20 object-contain invert" alt="BAPS Logo" onError={() => setSymErr(true)} />
-                 ) : (
-                    <i className="fas fa-fire-alt text-5xl text-white"></i>
-                 )}
+                <i className="fas fa-fire-alt text-5xl text-white"></i>
              </div>
           </div>
           <h2 className="text-4xl font-black text-pramukh-navy uppercase tracking-tighter italic leading-none mb-1">
             OFFICIAL PORTAL
           </h2>
-          <p className="text-xs font-bold text-slate-400 uppercase tracking-[0.4em] mb-4">
-            BAPS CHARITIES EVENT SYSTEM
-          </p>
-          <div className="flex justify-center items-center space-x-2 opacity-30 grayscale">
-             {config.bapsFullLogo ? (
-                <img src={config.bapsFullLogo} className="h-4 object-contain" alt="BAPS" />
-             ) : (
-                <>
-                    <i className="fas fa-certificate text-[10px]"></i>
-                    <span className="text-[10px] font-black uppercase tracking-widest">BAPS CHARITIES OFFICIAL</span>
-                </>
-             )}
+          <div className="flex justify-center items-center space-x-2 mt-4">
+             <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border transition-all ${dbActive ? 'bg-green-50 text-green-600 border-green-200' : 'bg-amber-50 text-amber-600 border-amber-200 animate-pulse'}`}>
+               {dbActive ? 'DATABASE: ATLAS LIVE' : 'DATABASE: LOCAL ONLY'}
+             </span>
           </div>
         </div>
         
@@ -105,41 +101,31 @@ const Login: React.FC = () => {
           <div className="space-y-5">
             <div>
               <label className="text-[10px] font-black uppercase text-slate-400 ml-2 tracking-[0.2em] mb-1 block">OFFICIAL USERNAME</label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-6 flex items-center pointer-events-none text-slate-300">
-                  <i className="fas fa-id-card-clip"></i>
-                </div>
-                <input
-                  type="text"
-                  required
-                  className="w-full pl-14 pr-6 py-5 border-2 border-slate-50 bg-slate-50 rounded-2xl focus:outline-none focus:border-pramukh-navy focus:bg-white transition-all font-black text-slate-800 shadow-inner italic uppercase"
-                  placeholder="ID"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                />
-              </div>
+              <input
+                type="text"
+                required
+                className="w-full px-6 py-5 border-2 border-slate-50 bg-slate-50 rounded-2xl focus:outline-none focus:border-pramukh-navy focus:bg-white transition-all font-black text-slate-800 shadow-inner italic uppercase"
+                placeholder="ID (e.g. admin)"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+              />
             </div>
             <div>
               <label className="text-[10px] font-black uppercase text-slate-400 ml-2 tracking-[0.2em] mb-1 block">ACCESS KEY</label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-6 flex items-center pointer-events-none text-slate-300">
-                  <i className="fas fa-shield-halved"></i>
-                </div>
-                <input
-                  type="password"
-                  required
-                  className="w-full pl-14 pr-6 py-5 border-2 border-slate-50 bg-slate-50 rounded-2xl focus:outline-none focus:border-pramukh-navy focus:bg-white transition-all font-black text-slate-800 shadow-inner"
-                  placeholder="••••••••"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                />
-              </div>
+              <input
+                type="password"
+                required
+                className="w-full px-6 py-5 border-2 border-slate-50 bg-slate-50 rounded-2xl focus:outline-none focus:border-pramukh-navy focus:bg-white transition-all font-black text-slate-800 shadow-inner"
+                placeholder="••••••••"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
             </div>
           </div>
 
           {error && (
-            <div className="bg-red-50 text-red-600 p-4 rounded-2xl text-[10px] font-black uppercase tracking-widest text-center border-2 border-red-100 animate-pulse">
-              <i className="fas fa-lock mr-2"></i> {error}
+            <div className="bg-red-50 text-red-600 p-4 rounded-2xl text-[10px] font-black uppercase tracking-widest text-center border-2 border-red-100">
+              {error}
             </div>
           )}
 
@@ -153,6 +139,12 @@ const Login: React.FC = () => {
             </button>
           </div>
         </form>
+
+        {!dbActive && (
+          <p className="text-center text-[10px] font-bold text-slate-300 uppercase italic tracking-widest leading-relaxed mt-8">
+            Initial setup? Use admin / admin123 to access control panel and link MongoDB.
+          </p>
+        )}
       </div>
     </div>
   );
