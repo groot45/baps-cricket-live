@@ -1,7 +1,7 @@
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { TOURNAMENT, SUPABASE_CONFIG } from '../config/tournament';
-import { Match, Team, Player, User, UserRole, TournamentConfig } from '../types';
+import { Match, Team, Player, User, UserRole, TournamentConfig, Inning, BatsmanStats, BowlerStats } from '../types';
 
 let supabase: SupabaseClient | null = null;
 
@@ -21,177 +21,83 @@ export const databaseService = {
   isGlobalConfig: false,
 
   async initRealm(config?: { url: string; key: string }) {
-    // 1. Check hardcoded config (Highest Priority - Syncs all devices)
-    // 2. Check manual UI config (Second Priority - Local only)
-    // 3. Check localStorage
     const url = SUPABASE_CONFIG.URL || config?.url || localStorage.getItem('sb_url');
     const key = SUPABASE_CONFIG.ANON_KEY || config?.key || localStorage.getItem('sb_key');
     
     this.isGlobalConfig = !!(SUPABASE_CONFIG.URL && SUPABASE_CONFIG.ANON_KEY);
 
     if (!url || !key || url === "" || key === "") {
-      console.log("Database: No credentials found. Running in Local Mode.");
-      this.isAtlasConnected = false;
       this.isOffline = true;
       return;
     }
 
     try {
       supabase = createClient(url, key);
-      
-      // Test connectivity
       const { error } = await supabase.from('matches').select('id').limit(1);
-      
       if (error) {
         if (error.code === 'PGRST116' || error.message.includes('not find the table') || error.code === '42P01') {
-          this.lastError = "CONNECTED BUT NO TABLES: Run the SQL script in your Supabase Editor to create the matches/teams tables.";
-          this.isAtlasConnected = false;
+          this.lastError = "DB Connected. Need to run SQL script.";
           this.isOffline = true;
           return;
         }
         throw error;
       }
-
       this.isAtlasConnected = true;
       this.isOffline = false;
       this.lastError = "";
-      
-      // Only save to localStorage if it wasn't already hardcoded
       if (!this.isGlobalConfig) {
         localStorage.setItem('sb_url', url);
         localStorage.setItem('sb_key', key);
       }
-
-      console.log(`Database: ${this.isGlobalConfig ? 'Global' : 'Local'} Supabase Connected.`);
     } catch (err: any) {
-      this.lastError = `CONNECTION FAILED: ${err.message}.`;
-      console.error("Supabase Connection Error:", err);
-      this.isAtlasConnected = false;
       this.isOffline = true;
     }
   },
 
-  async syncData<T>(tableName: string, localData: T[]): Promise<T[]> {
-    if (!supabase || this.isOffline) return localData;
-    try {
-      const { data, error } = await supabase.from(tableName).select('*');
-      if (error) throw error;
-      if (data && data.length > 0) {
-        saveLocal(tableName, data);
-        return data as T[];
-      }
-      return localData;
-    } catch (e) {
-      return localData;
-    }
-  },
-
-  async getTournamentConfig(): Promise<TournamentConfig> {
-    const local = getLocal('config');
-    const defaultConfig = {
-      id: TOURNAMENT.id,
-      name: TOURNAMENT.name,
-      shortName: "PRAMUKH CUP",
-      year: TOURNAMENT.year,
-      location: TOURNAMENT.location,
-      logoUrl: "",
-      bapsFullLogo: "",
-      bapsSymbol: ""
-    };
-
-    if (supabase && !this.isOffline) {
-      try {
-        const { data } = await supabase.from('config').select('*').eq('id', TOURNAMENT.id).single();
-        if (data) {
-          saveLocal('config', data);
-          return data;
-        }
-      } catch (e) {}
-    }
-    return local || defaultConfig;
-  },
-
-  async updateTournamentConfig(config: TournamentConfig): Promise<TournamentConfig> {
-    if (supabase && !this.isOffline) {
-      try { await supabase.from('config').upsert(config); } catch (e) {}
-    }
-    saveLocal('config', config);
-    return config;
-  },
-
-  async getUsers(): Promise<User[]> {
-    const local: User[] = getLocal('users') || [];
-    const remote = await this.syncData('users', local);
-    const defaultAdmins = [
-      { id: 'u_admin', username: 'admin', password: 'admin123', role: UserRole.ADMIN },
-      { id: 'u_kaushal', username: 'kaushal', password: 'kaushal', role: UserRole.ADMIN }
-    ];
-    const users = [...remote];
-    defaultAdmins.forEach(admin => {
-      if (!users.find(u => u.username.toLowerCase() === admin.username.toLowerCase())) {
-        users.push(admin as any);
-      }
-    });
-    return users as User[];
-  },
-
-  async createUser(user: Partial<User & { password?: string }>): Promise<User> {
-    const newUser = { ...user, id: `u_${Date.now()}` };
-    if (supabase && !this.isOffline) {
-      try { await supabase.from('users').insert(newUser); } catch (e) {}
-    }
-    const users = getLocal('users') || [];
-    saveLocal('users', [...users, newUser]);
-    return newUser as User;
-  },
-
-  async updateUser(id: string, user: Partial<User & { password?: string }>): Promise<User | null> {
-    if (supabase && !this.isOffline) {
-      try { await supabase.from('users').update(user).eq('id', id); } catch (e) {}
-    }
-    const users = getLocal('users') || [];
-    const index = users.findIndex((u: any) => u.id === id);
-    if (index !== -1) {
-      users[index] = { ...users[index], ...user };
-      saveLocal('users', users);
-      return users[index];
-    }
-    return null;
-  },
-
-  async getTeams(): Promise<Team[]> {
-    const local: Team[] = getLocal('teams') || [];
-    return this.syncData('teams', local);
-  },
-
-  async createTeam(team: Partial<Team>): Promise<Team> {
-    const newTeam = { ...team, id: `t_${Date.now()}` };
-    if (supabase && !this.isOffline) {
-      try { await supabase.from('teams').insert(newTeam); } catch (e) {}
-    }
-    const teams = getLocal('teams') || [];
-    saveLocal('teams', [...teams, newTeam]);
-    return newTeam as Team;
-  },
-
   async getPlayers(): Promise<Player[]> {
     const local: Player[] = getLocal('players') || [];
-    return this.syncData('players', local);
+    if (!supabase || this.isOffline) return local;
+    try {
+      const { data } = await supabase.from('players').select('*');
+      if (data) { saveLocal('players', data); return data; }
+    } catch (e) {}
+    return local;
   },
 
   async createPlayer(player: Partial<Player>): Promise<Player> {
     const newPlayer = { ...player, id: `p_${Date.now()}` };
-    if (supabase && !this.isOffline) {
-      try { await supabase.from('players').insert(newPlayer); } catch (e) {}
-    }
+    if (supabase && !this.isOffline) await supabase.from('players').insert(newPlayer);
     const players = getLocal('players') || [];
     saveLocal('players', [...players, newPlayer]);
     return newPlayer as Player;
   },
 
+  async getTeams(): Promise<Team[]> {
+    const local: Team[] = getLocal('teams') || [];
+    if (!supabase || this.isOffline) return local;
+    try {
+      const { data } = await supabase.from('teams').select('*');
+      if (data) { saveLocal('teams', data); return data; }
+    } catch (e) {}
+    return local;
+  },
+
+  async createTeam(team: Partial<Team>): Promise<Team> {
+    const newTeam = { ...team, id: `t_${Date.now()}` };
+    if (supabase && !this.isOffline) await supabase.from('teams').insert(newTeam);
+    const teams = getLocal('teams') || [];
+    saveLocal('teams', [...teams, newTeam]);
+    return newTeam as Team;
+  },
+
   async getMatches(): Promise<Match[]> {
     const local: Match[] = getLocal('matches') || [];
-    return this.syncData('matches', local);
+    if (!supabase || this.isOffline) return local;
+    try {
+      const { data } = await supabase.from('matches').select('*');
+      if (data) { saveLocal('matches', data); return data; }
+    } catch (e) {}
+    return local;
   },
 
   async createMatch(match: any): Promise<Match> {
@@ -200,43 +106,180 @@ export const databaseService = {
       id: `m_${Date.now()}`, 
       status: 'UPCOMING',
       currentInnings: 1,
-      innings: [{ battingTeamId: match.teamA.id, bowlingTeamId: match.teamB.id, runs: 0, wickets: 0, overs: 0, balls: 0, oversHistory: [] }]
+      innings: [{ 
+        battingTeamId: match.teamA.id, 
+        bowlingTeamId: match.teamB.id, 
+        runs: 0, 
+        wickets: 0, 
+        overs: 0, 
+        balls: 0, 
+        oversHistory: [],
+        batsmenStats: [],
+        bowlerStats: []
+      }]
     };
-    if (supabase && !this.isOffline) {
-      try { await supabase.from('matches').insert(newMatch); } catch (e) {}
-    }
+    if (supabase && !this.isOffline) await supabase.from('matches').insert(newMatch);
     const matches = getLocal('matches') || [];
     saveLocal('matches', [...matches, newMatch]);
     return newMatch as Match;
   },
 
-  async updateMatchScore(matchId: string, scoreUpdate: any): Promise<Match> {
+  async updateActivePlayers(matchId: string, updates: { strikerId?: string, nonStrikerId?: string, currentBowlerId?: string }): Promise<Match> {
     const matches = await this.getMatches();
-    const matchIndex = matches.findIndex(m => m.id === matchId);
-    if (matchIndex === -1) throw new Error("Match not found");
+    const idx = matches.findIndex(m => m.id === matchId);
+    if (idx === -1) throw new Error("Match not found");
+    const match = { ...matches[idx] };
+    const cur = match.innings[match.currentInnings - 1];
 
-    const match = { ...matches[matchIndex] };
-    const currentInning = match.innings[match.currentInnings - 1];
+    if (updates.strikerId) cur.strikerId = updates.strikerId;
+    if (updates.nonStrikerId) cur.nonStrikerId = updates.nonStrikerId;
+    if (updates.currentBowlerId) cur.currentBowlerId = updates.currentBowlerId;
 
-    if (scoreUpdate.isWicket) currentInning.wickets += 1;
-    else currentInning.runs += scoreUpdate.run;
-
-    if (!scoreUpdate.isExtra || (scoreUpdate.extraType !== 'wide' && scoreUpdate.extraType !== 'no-ball')) {
-      currentInning.balls += 1;
-      if (currentInning.balls >= 6) {
-        currentInning.overs += 1;
-        currentInning.balls = 0;
+    // Ensure player exists in stats
+    const players = await this.getPlayers();
+    [cur.strikerId, cur.nonStrikerId].forEach(id => {
+      if (id && !cur.batsmenStats.find(s => s.playerId === id)) {
+        const p = players.find(x => x.id === id);
+        if (p) cur.batsmenStats.push({ playerId: p.id, name: p.name, runs: 0, balls: 0, fours: 0, sixes: 0 });
       }
-    } else {
-      currentInning.runs += 1;
+    });
+    if (cur.currentBowlerId && !cur.bowlerStats.find(s => s.playerId === cur.currentBowlerId)) {
+        const p = players.find(x => x.id === cur.currentBowlerId);
+        if (p) cur.bowlerStats.push({ playerId: p.id, name: p.name, overs: 0, balls: 0, runs: 0, wickets: 0 });
     }
 
-    if (supabase && !this.isOffline) {
-      try { await supabase.from('matches').update({ innings: match.innings }).eq('id', matchId); } catch (e) {}
-    }
-    
-    matches[matchIndex] = match;
+    if (supabase && !this.isOffline) await supabase.from('matches').update({ innings: match.innings }).eq('id', matchId);
+    matches[idx] = match;
     saveLocal('matches', matches);
     return match;
+  },
+
+  async updateMatchScore(matchId: string, scoreUpdate: { run: number, isWicket: boolean, extraType: string | null }): Promise<Match> {
+    const matches = await this.getMatches();
+    const idx = matches.findIndex(m => m.id === matchId);
+    if (idx === -1) throw new Error("Match not found");
+    const match = { ...matches[idx] };
+    const cur = match.innings[match.currentInnings - 1];
+
+    // 1. Update Inning Totals
+    if (scoreUpdate.isWicket) cur.wickets += 1;
+    else cur.runs += scoreUpdate.run;
+
+    // 2. Handle Extras
+    if (scoreUpdate.extraType === 'wide' || scoreUpdate.extraType === 'no-ball') {
+      cur.runs += 1;
+    }
+
+    // 3. Update Individual Stats
+    if (cur.strikerId) {
+      let bStat = cur.batsmenStats.find(s => s.playerId === cur.strikerId);
+      if (bStat) {
+        if (!scoreUpdate.extraType || scoreUpdate.extraType === 'bye' || scoreUpdate.extraType === 'leg-bye') {
+           bStat.runs += scoreUpdate.run;
+           bStat.balls += 1;
+           if (scoreUpdate.run === 4) bStat.fours += 1;
+           if (scoreUpdate.run === 6) bStat.sixes += 1;
+        } else if (scoreUpdate.extraType === 'no-ball') {
+           bStat.runs += scoreUpdate.run;
+           bStat.balls += 1; // No balls count for balls faced in many formats
+        }
+      }
+    }
+
+    if (cur.currentBowlerId) {
+      let boStat = cur.bowlerStats.find(s => s.playerId === cur.currentBowlerId);
+      if (boStat) {
+        if (scoreUpdate.isWicket) boStat.wickets += 1;
+        boStat.runs += scoreUpdate.run;
+        if (scoreUpdate.extraType === 'wide' || scoreUpdate.extraType === 'no-ball') boStat.runs += 1;
+        
+        if (scoreUpdate.extraType !== 'wide' && scoreUpdate.extraType !== 'no-ball') {
+          boStat.balls += 1;
+          if (boStat.balls >= 6) { boStat.overs += 1; boStat.balls = 0; }
+        }
+      }
+    }
+
+    // 4. Update Overs
+    if (scoreUpdate.extraType !== 'wide' && scoreUpdate.extraType !== 'no-ball') {
+      cur.balls += 1;
+      if (cur.balls >= 6) {
+        cur.overs += 1;
+        cur.balls = 0;
+        // Auto Rotate Strike at end of over
+        const temp = cur.strikerId;
+        cur.strikerId = cur.nonStrikerId;
+        cur.nonStrikerId = temp;
+      }
+    }
+
+    // 5. Strike Rotation on odd runs
+    if (!scoreUpdate.isWicket && (scoreUpdate.run === 1 || scoreUpdate.run === 3)) {
+      const temp = cur.strikerId;
+      cur.strikerId = cur.nonStrikerId;
+      cur.nonStrikerId = temp;
+    }
+
+    if (supabase && !this.isOffline) await supabase.from('matches').update({ innings: match.innings }).eq('id', matchId);
+    matches[idx] = match;
+    saveLocal('matches', matches);
+    return match;
+  },
+
+  async getTournamentConfig(): Promise<TournamentConfig> {
+    const local = getLocal('config');
+    const def = { id: TOURNAMENT.id, name: TOURNAMENT.name, shortName: "PRAMUKH CUP", year: TOURNAMENT.year, location: TOURNAMENT.location, logoUrl: "", bapsFullLogo: "", bapsSymbol: "" };
+    if (supabase && !this.isOffline) {
+      try {
+        const { data } = await supabase.from('config').select('*').eq('id', TOURNAMENT.id).single();
+        if (data) { saveLocal('config', data); return data; }
+      } catch (e) {}
+    }
+    return local || def;
+  },
+
+  async updateTournamentConfig(c: TournamentConfig): Promise<TournamentConfig> {
+    if (supabase && !this.isOffline) await supabase.from('config').upsert(c);
+    saveLocal('config', c);
+    return c;
+  },
+
+  // Added missing createUser method
+  async createUser(user: any): Promise<any> {
+    const newUser = { ...user, id: `u_${Date.now()}` };
+    if (supabase && !this.isOffline) await supabase.from('users').insert(newUser);
+    const users = getLocal('users') || [];
+    saveLocal('users', [...users, newUser]);
+    return newUser;
+  },
+
+  // Added missing updateUser method
+  async updateUser(id: string, updates: any): Promise<any> {
+    if (supabase && !this.isOffline) await supabase.from('users').update(updates).eq('id', id);
+    const users = getLocal('users') || [];
+    const idx = users.findIndex((u: any) => u.id === id);
+    if (idx !== -1) {
+      users[idx] = { ...users[idx], ...updates };
+      saveLocal('users', users);
+    }
+    return updates;
+  },
+
+  async getUsers(): Promise<User[]> {
+    const local: User[] = getLocal('users') || [];
+    const remote = await this.syncData('users', local);
+    const def = [{ id: 'u_admin', username: 'admin', password: 'admin123', role: UserRole.ADMIN }, { id: 'u_kaushal', username: 'kaushal', password: 'kaushal', role: UserRole.ADMIN }];
+    const users = [...remote];
+    def.forEach(a => { if (!users.find(u => u.username.toLowerCase() === a.username.toLowerCase())) users.push(a as any); });
+    return users as User[];
+  },
+
+  async syncData<T>(tableName: string, localData: T[]): Promise<T[]> {
+    if (!supabase || this.isOffline) return localData;
+    try {
+      const { data } = await supabase.from(tableName).select('*');
+      if (data && data.length > 0) { saveLocal(tableName, data); return data as T[]; }
+    } catch (e) {}
+    return localData;
   }
 };

@@ -19,8 +19,8 @@ export interface TournamentConfig {
   year: number;
   location: string;
   logoUrl?: string;
-  bapsFullLogo?: string; // New: Full organization logo
-  bapsSymbol?: string;   // New: Organization symbol (flame)
+  bapsFullLogo?: string;
+  bapsSymbol?: string;
 }
 
 export interface Team {
@@ -33,6 +33,24 @@ export interface Team {
 export interface Player {
   id: string;
   name: string;
+}
+
+export interface BatsmanStats {
+  playerId: string;
+  name: string;
+  runs: number;
+  balls: number;
+  fours: number;
+  sixes: number;
+}
+
+export interface BowlerStats {
+  playerId: string;
+  name: string;
+  overs: number;
+  balls: number;
+  runs: number;
+  wickets: number;
 }
 
 export interface Ball {
@@ -58,6 +76,12 @@ export interface Inning {
   overs: number;
   balls: number;
   oversHistory: Over[];
+  // Live player tracking
+  strikerId?: string;
+  nonStrikerId?: string;
+  currentBowlerId?: string;
+  batsmenStats: BatsmanStats[];
+  bowlerStats: BowlerStats[];
 }
 
 export interface Match {
