@@ -16,7 +16,7 @@ const Navbar: React.FC = () => {
   useEffect(() => {
     const checkDb = () => setDbActive(databaseService.isAtlasConnected);
     checkDb();
-    const interval = setInterval(checkDb, 5000);
+    const interval = setInterval(checkDb, 3000);
     return () => clearInterval(interval);
   }, []);
 
@@ -64,7 +64,7 @@ const Navbar: React.FC = () => {
                 </div>
                 <div className="flex items-center">
                   <span className="text-2xl font-black tracking-tight italic uppercase">{config.shortName}</span>
-                  <div className={`ml-3 w-2 h-2 rounded-full animate-pulse ${dbActive ? 'bg-green-400' : 'bg-amber-400'}`} title={dbActive ? 'Connected to Atlas' : 'Local Mode Only'}></div>
+                  <div className={`ml-3 w-2 h-2 rounded-full animate-pulse ${dbActive ? 'bg-green-400' : 'bg-amber-400'}`} title={dbActive ? 'Atlas Cloud (Live)' : 'Local Storage Only'}></div>
                 </div>
                 <span className="text-[11px] font-bold tracking-[0.3em] text-pramukh-red uppercase ml-0.5">{config.location} {config.year}</span>
               </div>

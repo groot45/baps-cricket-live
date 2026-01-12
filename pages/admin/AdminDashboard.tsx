@@ -43,7 +43,7 @@ const AdminDashboard: React.FC = () => {
       setUsers(u);
       setDbStatus({ 
         connected: databaseService.isAtlasConnected, 
-        mode: databaseService.isAtlasConnected ? 'Atlas Cloud Active' : 'LocalStorage Only' 
+        mode: databaseService.isAtlasConnected ? 'Atlas Cloud (Live)' : 'Local Storage Only' 
       });
     } catch (err) {
       console.error("Critical Load Error:", err);
@@ -63,10 +63,19 @@ const AdminDashboard: React.FC = () => {
   }, [config]);
 
   const handleConnectMongo = async () => {
+    if (!mongoAppId) {
+        alert("Please enter a valid App ID first.");
+        return;
+    }
     setLoading(true);
     await databaseService.initRealm(mongoAppId);
     await fetchData();
     setLoading(false);
+    if (databaseService.isAtlasConnected) {
+        alert("Success! Connected to MongoDB Atlas.");
+    } else {
+        alert("Connection failed. Check your App ID and ensure Anonymous Auth is enabled in Atlas App Services.");
+    }
   };
 
   const handleCreateTeam = async () => {
@@ -178,8 +187,8 @@ const AdminDashboard: React.FC = () => {
                     <div className="bg-white w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6 shadow-xl text-pramukh-navy border-4 border-slate-50">
                        <i className={`fas fa-cloud-bolt text-3xl ${dbStatus.connected ? 'text-green-500' : 'text-slate-300'}`}></i>
                     </div>
-                    <h3 className="text-3xl font-black text-pramukh-navy uppercase italic mb-2 tracking-tighter">Connect Atlas Cluster: <span className="text-pramukh-red">nktsar9</span></h3>
-                    <p className="text-slate-400 text-xs font-bold uppercase tracking-[0.3em] mb-10 max-w-md mx-auto">Standard MongoDB strings (mongodb+srv) are for backends. This frontend app uses **MongoDB App Services** to securely talk to your cluster.</p>
+                    <h3 className="text-3xl font-black text-pramukh-navy uppercase italic mb-2 tracking-tighter">Vercel ↔ Atlas Cluster: <span className="text-pramukh-red">nktsar9</span></h3>
+                    <p className="text-slate-400 text-xs font-bold uppercase tracking-[0.3em] mb-10 max-w-md mx-auto">The app is currently in **{dbStatus.mode}**. Enter your MongoDB App ID below to enable cloud syncing.</p>
                     
                     <div className="max-w-md mx-auto space-y-4">
                        <input 
@@ -190,30 +199,34 @@ const AdminDashboard: React.FC = () => {
                          onChange={(e) => setMongoAppId(e.target.value)}
                        />
                        <button onClick={handleConnectMongo} className="w-full bg-pramukh-navy text-white font-black py-5 rounded-2xl uppercase italic tracking-widest shadow-xl hover:brightness-125 transition-all">
-                         Link App Service
+                         Test & Connect Atlas
                        </button>
                     </div>
                  </div>
 
                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                     <div className="bg-white p-10 rounded-[2.5rem] border-2 border-slate-100 shadow-sm">
-                       <h4 className="text-lg font-black text-pramukh-navy uppercase italic mb-6">How to get your App ID?</h4>
+                       <h4 className="text-lg font-black text-pramukh-navy uppercase italic mb-6">Setup in 3 Minutes</h4>
                        <ol className="space-y-4 text-sm font-bold text-slate-500 list-decimal pl-6">
-                          <li>Login to **MongoDB Atlas**.</li>
-                          <li>Click **App Services** tab at the top.</li>
-                          <li>Create a new App (linked to your `nktsar9` cluster).</li>
-                          <li>In the App Dashboard, find your **App ID** (usually top-left).</li>
-                          <li>Under **Authentication**, enable "Allow Anonymous Login".</li>
-                          <li>Under **Rules**, add a collection `baps-cricket-live` and enable Read/Write permissions.</li>
+                          <li>Login to **MongoDB Atlas** and find your cluster `nktsar9`.</li>
+                          <li>Click the **App Services** tab at the top of the Atlas page.</li>
+                          <li>Click **Create App** (choose "Build from Scratch").</li>
+                          <li>Copy the **App ID** (found at the top left of the dashboard).</li>
+                          <li>In your App Service: Go to **Authentication** > Enable **Allow Anonymous Login**.</li>
+                          <li>In your App Service: Go to **Data Access > Rules** > Link your `nktsar9` cluster and enable Read/Write for a collection named `baps-cricket-live`.</li>
                        </ol>
                     </div>
                     <div className="bg-pramukh-navy p-10 rounded-[2.5rem] shadow-xl text-white">
-                       <h4 className="text-lg font-black uppercase italic mb-6">Vercel Deployment Hint</h4>
-                       <p className="text-sm opacity-80 leading-relaxed mb-6 italic">To make this permanent for all users on your Vercel URL, go to Vercel Project Settings > Environment Variables and add:</p>
-                       <div className="bg-white/10 p-4 rounded-xl font-mono text-xs mb-4 break-all">
-                          VITE_MONGODB_APP_ID = your-app-id-here
+                       <h4 className="text-lg font-black uppercase italic mb-6">Vercel Deployment Sync</h4>
+                       <p className="text-sm opacity-80 mb-4 italic">To make this permanent for all users on Vercel, go to your **Vercel Project Settings > Environment Variables** and add:</p>
+                       <div className="bg-white/10 p-5 rounded-xl font-mono text-xs mb-6 flex justify-between items-center group cursor-pointer border border-white/20" onClick={() => {
+                          navigator.clipboard.writeText(`VITE_MONGODB_APP_ID=${mongoAppId || 'your-app-id'}`);
+                          alert("Variable copied! Paste this in Vercel.");
+                       }}>
+                          <span className="truncate">VITE_MONGODB_APP_ID = <span className="text-pramukh-red font-black">{mongoAppId || 'PASTE_ID_ABOVE'}</span></span>
+                          <i className="fas fa-copy opacity-0 group-hover:opacity-100 transition-opacity ml-4"></i>
                        </div>
-                       <p className="text-[10px] uppercase font-black tracking-widest opacity-40">This prevents "Local Mode" on production.</p>
+                       <p className="text-[10px] uppercase font-black tracking-widest opacity-40">**Note:** Vercel builds take ~1 min to update after you save environment variables.</p>
                     </div>
                  </div>
               </div>
@@ -240,7 +253,7 @@ const AdminDashboard: React.FC = () => {
                             </div>
                         </div>
                         <div className="space-y-1">
-                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Tournament Logo (URL or Base64)</label>
+                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Tournament Logo (URL)</label>
                             <input type="text" className="w-full px-6 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-black italic" value={tempConfig.logoUrl} onChange={e => setTempConfig({...tempConfig, logoUrl: e.target.value})} />
                         </div>
                         <button onClick={handleSaveSettings} className="bg-pramukh-navy text-white font-black px-10 py-5 rounded-2xl uppercase italic tracking-widest shadow-xl hover:brightness-125 transition-all w-full lg:w-fit">Save Tournament Brand</button>
@@ -281,7 +294,6 @@ const AdminDashboard: React.FC = () => {
         )}
       </div>
 
-      {/* Modals remain same but use fetchData for refreshing */}
       {showUserModal && (
         <div className="fixed inset-0 bg-pramukh-navy/95 backdrop-blur-xl flex items-center justify-center p-6 z-[100]">
           <div className="bg-white rounded-[3rem] w-full max-w-md p-12 shadow-2xl border-b-[16px] border-pramukh-red">
