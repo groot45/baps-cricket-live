@@ -24,10 +24,12 @@ export const databaseService = {
     const url = SUPABASE_CONFIG.URL || config?.url || localStorage.getItem('sb_url');
     const key = SUPABASE_CONFIG.ANON_KEY || config?.key || localStorage.getItem('sb_key');
     this.isGlobalConfig = !!(SUPABASE_CONFIG.URL && SUPABASE_CONFIG.ANON_KEY);
+    
     if (!url || !key || url === "" || key === "") {
       this.isOffline = true;
       return;
     }
+    
     try {
       supabase = createClient(url, key);
       const { error } = await supabase.from('matches').select('id').limit(1);
@@ -49,24 +51,27 @@ export const databaseService = {
   },
 
   /**
-   * Hybrid Merge Logic: 
-   * Always prioritizes data that hasn't been synced yet (ID starting with prefix)
+   * Universal Merger: Merges remote data with local data based on ID.
+   * Ensures local entries are never deleted by an empty DB response.
    */
+  mergeData<T extends { id: string }>(local: T[], remote: T[]): T[] {
+    const map = new Map<string, T>();
+    // 1. Start with local (optimistic)
+    local.forEach(item => map.set(item.id, item));
+    // 2. Overwrite with remote (source of truth)
+    remote.forEach(item => map.set(item.id, item));
+    return Array.from(map.values());
+  },
+
   async getPlayers(): Promise<Player[]> {
     const local: Player[] = getLocal('players') || [];
     if (!supabase || this.isOffline) return local;
     try {
       const { data, error } = await supabase.from('players').select('*');
       if (error) throw error;
-      if (data) { 
-        const remoteData = data as Player[];
-        // Keep local players that aren't in remote yet
-        const remoteIds = new Set(remoteData.map(r => r.id));
-        const localOnly = local.filter(l => l.id.startsWith('p_') && !remoteIds.has(l.id));
-        const merged = [...remoteData, ...localOnly];
-        saveLocal('players', merged); 
-        return merged; 
-      }
+      const merged = this.mergeData(local, (data || []) as Player[]);
+      saveLocal('players', merged); 
+      return merged; 
     } catch (e) {
       console.warn("DB Player Fetch Error:", e);
     }
@@ -83,14 +88,13 @@ export const databaseService = {
       role: player.role || 'Batsman'
     } as Player;
     
-    // Save locally first (INSTANT UI UPDATE)
     const players = getLocal('players') || [];
     saveLocal('players', [...players, newPlayer]);
     
     if (supabase && !this.isOffline) {
       try {
         const { error } = await supabase.from('players').insert(newPlayer);
-        if (error) console.error("Cloud Sync Delayed:", error.message);
+        if (error) console.error("Supabase Sync Error:", error.message);
       } catch (err) {}
     }
     return newPlayer;
@@ -102,14 +106,9 @@ export const databaseService = {
     try {
       const { data, error } = await supabase.from('teams').select('*');
       if (error) throw error;
-      if (data) { 
-        const remoteData = data as Team[];
-        const remoteIds = new Set(remoteData.map(r => r.id));
-        const localOnly = local.filter(l => l.id.startsWith('t_') && !remoteIds.has(l.id));
-        const merged = [...remoteData, ...localOnly];
-        saveLocal('teams', merged); 
-        return merged; 
-      }
+      const merged = this.mergeData(local, (data || []) as Team[]);
+      saveLocal('teams', merged); 
+      return merged; 
     } catch (e) {
       console.warn("DB Team Fetch Error:", e);
     }
@@ -130,7 +129,7 @@ export const databaseService = {
     if (supabase && !this.isOffline) {
       try {
         const { error } = await supabase.from('teams').insert(newTeam);
-        if (error) console.error("Cloud Sync Delayed:", error.message);
+        if (error) console.error("Supabase Sync Error:", error.message);
       } catch (err) {}
     }
     return newTeam;
@@ -156,14 +155,9 @@ export const databaseService = {
     try {
       const { data, error } = await supabase.from('matches').select('*');
       if (error) throw error;
-      if (data) { 
-        const remoteData = data as Match[];
-        const remoteIds = new Set(remoteData.map(r => r.id));
-        const localOnly = local.filter(l => l.id.startsWith('m_') && !remoteIds.has(l.id));
-        const merged = [...remoteData, ...localOnly];
-        saveLocal('matches', merged); 
-        return merged; 
-      }
+      const merged = this.mergeData(local, (data || []) as Match[]);
+      saveLocal('matches', merged); 
+      return merged; 
     } catch (e) {
       console.warn("DB Match Fetch Error:", e);
     }
@@ -200,7 +194,7 @@ export const databaseService = {
     if (supabase && !this.isOffline) {
       try {
         const { error } = await supabase.from('matches').insert(newMatch);
-        if (error) console.error("Cloud Sync Delayed:", error.message);
+        if (error) console.error("Supabase Sync Error:", error.message);
       } catch (err) {}
     }
     return newMatch;

@@ -85,13 +85,11 @@ ALTER TABLE matches DISABLE ROW LEVEL SECURITY;`;
         databaseService.getUsers()
       ]);
       
-      // Safety Check: Never overwrite local data with NOTHING unless explicitly empty
-      if (t.length > 0 || teams.length === 0) setTeams(t);
-      if (p.length > 0 || players.length === 0) setPlayers(p);
-      if (m.length > 0 || matches.length === 0) setMatches(m);
-      if (u.length > 0 || users.length === 0) setUsers(u);
+      setTeams(t);
+      setPlayers(p);
+      setMatches(m);
+      setUsers(u);
       
-      // Update selected team if it was set
       if (selectedTeam) {
         const updated = t.find(team => team.id === selectedTeam.id);
         if (updated) setSelectedTeam(updated);
@@ -104,7 +102,7 @@ ALTER TABLE matches DISABLE ROW LEVEL SECURITY;`;
         isGlobal: databaseService.isGlobalConfig
       });
     } catch (err) {
-      console.error("Critical Load Error:", err);
+      console.error("Fetch Failure:", err);
     } finally {
       setLoading(false);
     }
@@ -128,13 +126,13 @@ ALTER TABLE matches DISABLE ROW LEVEL SECURITY;`;
       setShowTeamModal(false);
       setNewTeam({ name: '', shortName: '', logoUrl: '' });
     } catch (e) {
-      alert("Failed to create team");
+      alert("Creation Failed");
     }
   };
 
   const handleCreatePlayer = async () => {
     if (!newPlayer.name || !newPlayer.teamId) { 
-      alert("Error: Player name and team assignment are required."); 
+      alert("Name and Team required"); 
       return; 
     }
     
@@ -153,8 +151,7 @@ ALTER TABLE matches DISABLE ROW LEVEL SECURITY;`;
         role: 'Batsman' 
       });
     } catch (e) {
-      console.error(e);
-      alert("Failed to add player. App continuing in local mode.");
+      alert("Error adding player");
     } finally {
       setLoading(false);
     }
@@ -163,7 +160,7 @@ ALTER TABLE matches DISABLE ROW LEVEL SECURITY;`;
   const handleCreateMatch = async () => {
     const teamA = teams.find(t => t.id === newMatch.teamAId);
     const teamB = teams.find(t => t.id === newMatch.teamBId);
-    if (!teamA || !teamB) { alert("Select both teams."); return; }
+    if (!teamA || !teamB) { alert("Select both teams"); return; }
     
     try {
       const created = await databaseService.createMatch({ 
@@ -176,19 +173,19 @@ ALTER TABLE matches DISABLE ROW LEVEL SECURITY;`;
       setMatches(prev => [...prev, created]);
       setShowMatchModal(false);
     } catch (e) {
-      alert("Failed to create match");
+      alert("Match creation error");
     }
   };
 
   const handleConnectSupabase = async () => {
-    if (!sbUrl || !sbKey) { alert("Enter both URL and Key."); return; }
+    if (!sbUrl || !sbKey) { alert("Enter URL and Key"); return; }
     setLoading(true);
     await databaseService.initRealm({ url: sbUrl, key: sbKey });
     await fetchData();
     setLoading(false);
   };
 
-  if (!isAdmin) return <div className="p-8 text-center text-red-600 font-black uppercase tracking-widest">Access Denied</div>;
+  if (!isAdmin) return <div className="p-8 text-center text-red-600 font-black uppercase tracking-widest font-din">Unauthorized</div>;
 
   const rosterPlayers = players.filter(p => p.teamId === selectedTeam?.id);
 
@@ -220,7 +217,7 @@ ALTER TABLE matches DISABLE ROW LEVEL SECURITY;`;
             {tab}
           </button>
         ))}
-        <button onClick={fetchData} className="px-4 py-3 rounded-xl text-pramukh-red hover:bg-red-50 transition-colors" title="Force Refresh Sync">
+        <button onClick={fetchData} className="px-4 py-3 rounded-xl text-pramukh-red hover:bg-red-50 transition-colors" title="Sync">
           <i className={`fas fa-sync-alt ${loading ? 'animate-spin' : ''}`}></i>
         </button>
       </div>
@@ -283,7 +280,7 @@ ALTER TABLE matches DISABLE ROW LEVEL SECURITY;`;
                             <button onClick={() => { 
                               setNewPlayer({ ...newPlayer, teamId: selectedTeam.id }); 
                               setShowPlayerModal(true); 
-                            }} className="w-full bg-pramukh-red text-white font-black py-4 rounded-xl uppercase text-xs tracking-widest italic shadow-lg active:scale-95 transition-transform">Add Player to Squad</button>
+                            }} className="w-full bg-pramukh-red text-white font-black py-4 rounded-xl uppercase text-xs tracking-widest italic shadow-lg active:scale-95 transition-transform">Add Player</button>
                          </div>
                       </div>
                    </div>
@@ -308,7 +305,7 @@ ALTER TABLE matches DISABLE ROW LEVEL SECURITY;`;
                     <div className="bg-white w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6 shadow-xl text-pramukh-navy border-4 border-slate-50"><i className={`fas fa-cloud-bolt text-3xl ${dbStatus.connected ? 'text-green-500' : 'text-slate-300'}`}></i></div>
                     <h3 className="text-3xl font-black text-pramukh-navy uppercase italic mb-2 tracking-tighter">SUPABASE SCHEMA MANAGER</h3>
                     <p className="text-slate-400 text-xs font-bold uppercase tracking-[0.3em] mb-10 max-w-xl mx-auto italic leading-relaxed">
-                      If you see errors like "Column not found", run this script in your Supabase SQL Editor to synchronize the schema.
+                      If you see errors like "Column not found", run this script in your Supabase SQL Editor.
                     </p>
                     <div className="bg-pramukh-navy p-10 rounded-[2.5rem] shadow-xl text-white text-left max-w-2xl mx-auto">
                        <h4 className="text-lg font-black uppercase italic mb-4">Migration Script</h4>
@@ -324,32 +321,31 @@ ALTER TABLE matches DISABLE ROW LEVEL SECURITY;`;
         )}
       </div>
 
-      {/* MATCH MODAL */}
+      {/* MODALS */}
       {showMatchModal && (
         <div className="fixed inset-0 bg-pramukh-navy/95 backdrop-blur-xl flex items-center justify-center p-6 z-[100]">
           <div className="bg-white rounded-[3rem] w-full max-w-lg p-12 shadow-2xl border-b-[16px] border-pramukh-red">
             <h2 className="text-3xl font-black text-pramukh-navy uppercase italic mb-8 text-center">NEW FIXTURE</h2>
             <div className="space-y-6">
-               <select className="w-full px-6 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-black uppercase italic focus:border-pramukh-navy focus:bg-white outline-none" value={newMatch.teamAId} onChange={e => setNewMatch({...newMatch, teamAId: e.target.value})}><option value="">Select Team A</option>{teams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select>
-               <select className="w-full px-6 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-black uppercase italic focus:border-pramukh-navy focus:bg-white outline-none" value={newMatch.teamBId} onChange={e => setNewMatch({...newMatch, teamBId: e.target.value})}><option value="">Select Team B</option>{teams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select>
-               <input type="datetime-local" className="w-full px-6 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-black uppercase italic focus:border-pramukh-navy focus:bg-white outline-none" onChange={e => setNewMatch({...newMatch, date: e.target.value})} />
+               <select className="w-full px-6 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-black uppercase italic outline-none" value={newMatch.teamAId} onChange={e => setNewMatch({...newMatch, teamAId: e.target.value})}><option value="">Select Team A</option>{teams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select>
+               <select className="w-full px-6 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-black uppercase italic outline-none" value={newMatch.teamBId} onChange={e => setNewMatch({...newMatch, teamBId: e.target.value})}><option value="">Select Team B</option>{teams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select>
+               <input type="datetime-local" className="w-full px-6 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-black uppercase italic outline-none" onChange={e => setNewMatch({...newMatch, date: e.target.value})} />
                <div className="flex gap-4"><button onClick={handleCreateMatch} className="flex-1 bg-pramukh-navy text-white font-black py-4 rounded-xl uppercase italic shadow-lg active:scale-95 transition-transform">Confirm</button><button onClick={() => setShowMatchModal(false)} className="flex-1 bg-slate-100 text-slate-400 font-black py-4 rounded-xl uppercase italic active:scale-95 transition-transform">Cancel</button></div>
             </div>
           </div>
         </div>
       )}
 
-      {/* PLAYER MODAL */}
       {showPlayerModal && (
         <div className="fixed inset-0 bg-pramukh-navy/95 backdrop-blur-xl flex items-center justify-center p-6 z-[100]">
           <div className="bg-white rounded-[3rem] w-full max-w-xl p-12 shadow-2xl border-b-[16px] border-pramukh-red">
             <h2 className="text-3xl font-black text-pramukh-navy uppercase italic mb-2 text-center">ADD TO SQUAD</h2>
             <p className="text-center text-[10px] font-black text-pramukh-red uppercase tracking-widest mb-8 italic">ASSIGNING TO: {teams.find(t => t.id === newPlayer.teamId)?.name}</p>
             <div className="space-y-5">
-              <input type="text" className="w-full px-6 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-black uppercase italic focus:border-pramukh-navy focus:bg-white outline-none" placeholder="Full Name" value={newPlayer.name} onChange={e => setNewPlayer({...newPlayer, name: e.target.value})} />
+              <input type="text" className="w-full px-6 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-black uppercase italic focus:bg-white outline-none" placeholder="Full Name" value={newPlayer.name} onChange={e => setNewPlayer({...newPlayer, name: e.target.value})} />
               <div className="grid grid-cols-2 gap-4">
-                 <div><label className="text-[10px] font-black text-slate-400 uppercase ml-2 mb-1 block">Role</label><select className="w-full px-6 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-black uppercase italic focus:border-pramukh-navy outline-none" value={newPlayer.role} onChange={e => setNewPlayer({...newPlayer, role: e.target.value as PlayerRole})}><option value="Batsman">Batsman</option><option value="Bowler">Bowler</option><option value="All-Rounder">All-Rounder</option><option value="Wicket Keeper">Wicket Keeper</option></select></div>
-                 <div><label className="text-[10px] font-black text-slate-400 uppercase ml-2 mb-1 block">Batting</label><select className="w-full px-6 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-black uppercase italic focus:border-pramukh-navy outline-none" value={newPlayer.battingStyle} onChange={e => setNewPlayer({...newPlayer, battingStyle: e.target.value as BattingStyle})}><option value="Right Hand">Right Hand</option><option value="Left Hand">Left Hand</option></select></div>
+                 <div><label className="text-[10px] font-black text-slate-400 uppercase ml-2 mb-1 block">Role</label><select className="w-full px-6 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-black uppercase italic outline-none" value={newPlayer.role} onChange={e => setNewPlayer({...newPlayer, role: e.target.value as PlayerRole})}><option value="Batsman">Batsman</option><option value="Bowler">Bowler</option><option value="All-Rounder">All-Rounder</option><option value="Wicket Keeper">Wicket Keeper</option></select></div>
+                 <div><label className="text-[10px] font-black text-slate-400 uppercase ml-2 mb-1 block">Batting</label><select className="w-full px-6 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-black uppercase italic outline-none" value={newPlayer.battingStyle} onChange={e => setNewPlayer({...newPlayer, battingStyle: e.target.value as BattingStyle})}><option value="Right Hand">Right Hand</option><option value="Left Hand">Left Hand</option></select></div>
               </div>
               <div className="flex gap-4 pt-4"><button onClick={handleCreatePlayer} className="flex-1 bg-pramukh-navy text-white font-black py-4 rounded-xl uppercase italic shadow-lg active:scale-95 transition-transform">Confirm Add</button><button onClick={() => setShowPlayerModal(false)} className="flex-1 bg-slate-100 text-slate-400 font-black py-4 rounded-xl uppercase italic active:scale-95 transition-transform">Cancel</button></div>
             </div>
@@ -357,14 +353,13 @@ ALTER TABLE matches DISABLE ROW LEVEL SECURITY;`;
         </div>
       )}
 
-      {/* TEAM MODAL */}
       {showTeamModal && (
         <div className="fixed inset-0 bg-pramukh-navy/95 backdrop-blur-xl flex items-center justify-center p-6 z-[100]">
           <div className="bg-white rounded-[3rem] w-full max-w-md p-12 shadow-2xl border-b-[16px] border-pramukh-red">
             <h2 className="text-3xl font-black text-pramukh-navy uppercase italic mb-8 text-center">REGISTER TEAM</h2>
             <div className="space-y-5">
-              <input type="text" className="w-full px-6 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-black uppercase italic focus:border-pramukh-navy focus:bg-white outline-none" placeholder="Team Name" value={newTeam.name} onChange={e => setNewTeam({...newTeam, name: e.target.value})} />
-              <input type="text" className="w-full px-6 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-black uppercase italic focus:border-pramukh-navy focus:bg-white outline-none" placeholder="Short Name" value={newTeam.shortName} onChange={e => setNewTeam({...newTeam, shortName: e.target.value})} />
+              <input type="text" className="w-full px-6 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-black uppercase italic focus:bg-white outline-none" placeholder="Team Name" value={newTeam.name} onChange={e => setNewTeam({...newTeam, name: e.target.value})} />
+              <input type="text" className="w-full px-6 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-black uppercase italic focus:bg-white outline-none" placeholder="Short Name" value={newTeam.shortName} onChange={e => setNewTeam({...newTeam, shortName: e.target.value})} />
               <div className="flex gap-4 pt-4"><button onClick={handleCreateTeam} className="flex-1 bg-pramukh-navy text-white font-black py-4 rounded-xl uppercase italic shadow-lg active:scale-95 transition-transform">Save Team</button><button onClick={() => setShowTeamModal(false)} className="flex-1 bg-slate-100 text-slate-400 font-black py-4 rounded-xl uppercase italic active:scale-95 transition-transform">Cancel</button></div>
             </div>
           </div>
